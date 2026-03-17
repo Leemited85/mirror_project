@@ -14,7 +14,7 @@ export function StatusPanel({ status }: StatusPanelProps) {
         <dt>Message</dt>
         <dd>{status.message}</dd>
         <dt>Updated</dt>
-        <dd>{status.lastUpdatedAt ? new Date(status.lastUpdatedAt).toLocaleTimeString() : '—'}</dd>
+        <dd>{status.lastUpdatedAt ? new Date(status.lastUpdatedAt).toLocaleTimeString() : '-'}</dd>
       </dl>
     </section>
   );
