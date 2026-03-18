@@ -5,38 +5,23 @@ import { MirrorView } from './components/MirrorView';
 import { StatusPanel } from './components/StatusPanel';
 import type { AppStatus, Garment } from './types/fitting';
 
-type OverlayPlacement = {
-  top: number;
-  left: number;
-  width: number;
-  opacity?: number;
-};
-
 type SampleGarment = Garment & {
-  placement: OverlayPlacement;
+  brand: string;
+  color: string;
+  silhouette: string;
+  notes: string;
 };
 
 const GARMENTS: SampleGarment[] = [
   {
-    id: 'tshirt',
-    name: 'Classic Tee',
-    thumbnailUrl: '/clothes/tshirt.svg',
-    overlayUrl: '/clothes/tshirt.svg',
-    placement: { top: 24, left: 26, width: 48, opacity: 0.9 }
-  },
-  {
-    id: 'jacket',
-    name: 'Soft Jacket',
-    thumbnailUrl: '/clothes/jacket.svg',
-    overlayUrl: '/clothes/jacket.svg',
-    placement: { top: 20, left: 22, width: 56, opacity: 0.92 }
-  },
-  {
-    id: 'hoodie',
-    name: 'Urban Hoodie',
-    thumbnailUrl: '/clothes/hoodie.svg',
-    overlayUrl: '/clothes/hoodie.svg',
-    placement: { top: 18, left: 21, width: 58, opacity: 0.9 }
+    id: 'hoodie-brown',
+    name: 'Oversized Hoodie',
+    brand: 'Sample Product',
+    color: 'Brown',
+    silhouette: 'Relaxed fit hoodie',
+    notes: 'Real product-shot reference loaded from the provided AVIF asset.',
+    thumbnailUrl: '/clothes/hoodie-brown.avif',
+    overlayUrl: '/clothes/hoodie-brown.avif'
   }
 ];
 
@@ -46,7 +31,7 @@ function App() {
   const [photoName, setPhotoName] = useState<string>('No photo selected');
   const [status, setStatus] = useState<AppStatus>({
     phase: 'idle',
-    message: 'Upload a portrait photo and choose a garment.'
+    message: 'Upload a portrait photo to compare it with the real garment product shot.'
   });
 
   useEffect(() => {
@@ -74,7 +59,7 @@ function App() {
     setPhotoName(file.name);
     setStatus({
       phase: 'ready',
-      message: `${file.name} loaded. You can preview and save the sample view.`,
+      message: `${file.name} loaded. You can now compare it against the garment product image.`,
       lastUpdatedAt: new Date().toISOString()
     });
   };
@@ -92,23 +77,23 @@ function App() {
     if (!photoUrl) {
       setStatus({
         phase: 'error',
-        message: 'Upload a photo before saving the sample view.',
+        message: 'Upload a photo before saving the sample board.',
         lastUpdatedAt: new Date().toISOString()
       });
       return;
     }
 
-    const baseImage = new Image();
-    const overlayImage = new Image();
+    const modelImage = new Image();
+    const garmentImage = new Image();
 
-    baseImage.src = photoUrl;
-    overlayImage.src = selectedGarment.overlayUrl;
+    modelImage.src = photoUrl;
+    garmentImage.src = selectedGarment.thumbnailUrl;
 
-    baseImage.onload = () => {
-      overlayImage.onload = () => {
+    modelImage.onload = () => {
+      garmentImage.onload = () => {
         const canvas = document.createElement('canvas');
-        canvas.width = baseImage.naturalWidth;
-        canvas.height = baseImage.naturalHeight;
+        canvas.width = 1600;
+        canvas.height = 1000;
 
         const context = canvas.getContext('2d');
         if (!context) {
@@ -120,40 +105,55 @@ function App() {
           return;
         }
 
-        context.drawImage(baseImage, 0, 0, canvas.width, canvas.height);
+        context.fillStyle = '#f3efe8';
+        context.fillRect(0, 0, canvas.width, canvas.height);
 
-        const placement = selectedGarment.placement;
-        const overlayWidth = (canvas.width * placement.width) / 100;
-        const overlayX = (canvas.width * placement.left) / 100;
-        const overlayY = (canvas.height * placement.top) / 100;
-        const overlayHeight = (overlayWidth / overlayImage.naturalWidth) * overlayImage.naturalHeight;
+        context.fillStyle = '#ffffff';
+        roundRect(context, 70, 120, 690, 760, 30);
+        context.fill();
 
-        context.globalAlpha = placement.opacity ?? 0.9;
-        context.drawImage(overlayImage, overlayX, overlayY, overlayWidth, overlayHeight);
-        context.globalAlpha = 1;
+        context.fillStyle = '#fffdf9';
+        roundRect(context, 840, 120, 690, 760, 30);
+        context.fill();
+
+        drawCoverImage(context, modelImage, 95, 145, 640, 710);
+        drawContainImage(context, garmentImage, 875, 145, 620, 710);
+
+        context.fillStyle = '#8c6b4f';
+        context.font = '600 28px Segoe UI';
+        context.fillText('Uploaded Photo', 95, 90);
+        context.fillText('Garment Product Shot', 875, 90);
+
+        context.fillStyle = '#1d2a39';
+        context.font = '700 34px Segoe UI';
+        context.fillText(selectedGarment.name, 875, 905);
+
+        context.fillStyle = '#5d6b7a';
+        context.font = '500 24px Segoe UI';
+        context.fillText(`${selectedGarment.brand} | ${selectedGarment.color} | ${selectedGarment.silhouette}`, 875, 945);
 
         const link = document.createElement('a');
-        link.download = `mirror-sample-${Date.now()}.png`;
+        link.download = `mirror-sample-board-${Date.now()}.png`;
         link.href = canvas.toDataURL('image/png');
         link.click();
 
         setStatus({
           phase: 'ready',
-          message: 'Sample view saved locally.',
+          message: 'Sample board saved locally.',
           lastUpdatedAt: new Date().toISOString()
         });
       };
 
-      overlayImage.onerror = () => {
+      garmentImage.onerror = () => {
         setStatus({
           phase: 'error',
-          message: 'Failed to load garment overlay.',
+          message: 'Failed to load the garment image.',
           lastUpdatedAt: new Date().toISOString()
         });
       };
     };
 
-    baseImage.onerror = () => {
+    modelImage.onerror = () => {
       setStatus({
         phase: 'error',
         message: 'Failed to load the selected photo.',
@@ -166,9 +166,9 @@ function App() {
     <main className="app">
       <header className="app-header">
         <div>
-          <p className="eyebrow">Web Sample View</p>
+          <p className="eyebrow">Product Shot Sample</p>
           <h1>Virtual Fitting Mirror</h1>
-          <p className="intro">Preview a fitting sample in the browser with an uploaded photo and static garment SVG data.</p>
+          <p className="intro">Use a real garment product image for a cleaner web sample, then compare it side-by-side with the uploaded person photo.</p>
         </div>
         <label className="upload-button">
           <span>Upload Photo</span>
@@ -183,6 +183,12 @@ function App() {
           isLoading={false}
         />
         <div className="center-column">
+          <section className="panel garment-summary">
+            <span className="photo-label">Selected garment</span>
+            <strong>{selectedGarment.name}</strong>
+            <span className="garment-meta">{selectedGarment.brand} | {selectedGarment.color}</span>
+            <p>{selectedGarment.notes}</p>
+          </section>
           <div className="panel photo-meta">
             <span className="photo-label">Selected photo</span>
             <strong>{photoName}</strong>
@@ -194,6 +200,80 @@ function App() {
       </div>
     </main>
   );
+}
+
+function roundRect(
+  context: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radius: number
+) {
+  context.beginPath();
+  context.moveTo(x + radius, y);
+  context.lineTo(x + width - radius, y);
+  context.quadraticCurveTo(x + width, y, x + width, y + radius);
+  context.lineTo(x + width, y + height - radius);
+  context.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+  context.lineTo(x + radius, y + height);
+  context.quadraticCurveTo(x, y + height, x, y + height - radius);
+  context.lineTo(x, y + radius);
+  context.quadraticCurveTo(x, y, x + radius, y);
+  context.closePath();
+}
+
+function drawCoverImage(
+  context: CanvasRenderingContext2D,
+  image: HTMLImageElement,
+  x: number,
+  y: number,
+  width: number,
+  height: number
+) {
+  const sourceRatio = image.naturalWidth / image.naturalHeight;
+  const targetRatio = width / height;
+
+  let sourceWidth = image.naturalWidth;
+  let sourceHeight = image.naturalHeight;
+  let sourceX = 0;
+  let sourceY = 0;
+
+  if (sourceRatio > targetRatio) {
+    sourceWidth = image.naturalHeight * targetRatio;
+    sourceX = (image.naturalWidth - sourceWidth) / 2;
+  } else {
+    sourceHeight = image.naturalWidth / targetRatio;
+    sourceY = (image.naturalHeight - sourceHeight) / 2;
+  }
+
+  context.drawImage(image, sourceX, sourceY, sourceWidth, sourceHeight, x, y, width, height);
+}
+
+function drawContainImage(
+  context: CanvasRenderingContext2D,
+  image: HTMLImageElement,
+  x: number,
+  y: number,
+  width: number,
+  height: number
+) {
+  const sourceRatio = image.naturalWidth / image.naturalHeight;
+  const targetRatio = width / height;
+
+  let drawWidth = width;
+  let drawHeight = height;
+
+  if (sourceRatio > targetRatio) {
+    drawHeight = width / sourceRatio;
+  } else {
+    drawWidth = height * sourceRatio;
+  }
+
+  const drawX = x + (width - drawWidth) / 2;
+  const drawY = y + (height - drawHeight) / 2;
+
+  context.drawImage(image, drawX, drawY, drawWidth, drawHeight);
 }
 
 export default App;

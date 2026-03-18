@@ -1,14 +1,9 @@
 import type { Garment } from '../types/fitting';
 
-type OverlayPlacement = {
-  top: number;
-  left: number;
-  width: number;
-  opacity?: number;
-};
-
 type MirrorGarment = Garment & {
-  placement: OverlayPlacement;
+  brand: string;
+  color: string;
+  silhouette: string;
 };
 
 type MirrorViewProps = {
@@ -17,26 +12,37 @@ type MirrorViewProps = {
 };
 
 export function MirrorView({ photoUrl, garment }: MirrorViewProps) {
-  const placementStyle = {
-    top: `${garment.placement.top}%`,
-    left: `${garment.placement.left}%`,
-    width: `${garment.placement.width}%`,
-    opacity: garment.placement.opacity ?? 0.9
-  };
-
   return (
     <section className="mirror panel">
-      <div className="mirror-canvas">
-        {photoUrl ? (
-          <>
-            <img src={photoUrl} alt="Uploaded model" className="photo-preview" />
-            <img src={garment.overlayUrl} alt={`${garment.name} overlay`} className="overlay fitted-overlay" style={placementStyle} />
-          </>
-        ) : (
-          <div className="empty-state">
-            <p>Upload a photo to preview the garment overlay sample here.</p>
+      <div className="sample-board">
+        <article className="sample-card">
+          <div className="sample-card-header">
+            <span>Model Photo</span>
           </div>
-        )}
+          <div className="sample-card-body model-stage">
+            {photoUrl ? (
+              <img src={photoUrl} alt="Uploaded model" className="stage-image model-image" />
+            ) : (
+              <div className="empty-state">
+                <p>Upload a portrait photo to compare it with the selected garment.</p>
+              </div>
+            )}
+          </div>
+        </article>
+
+        <article className="sample-card">
+          <div className="sample-card-header">
+            <span>Garment Reference</span>
+          </div>
+          <div className="sample-card-body garment-stage">
+            <img src={garment.thumbnailUrl} alt={garment.name} className="stage-image garment-image" />
+          </div>
+          <div className="sample-card-footer">
+            <strong>{garment.name}</strong>
+            <span>{garment.brand}</span>
+            <span>{garment.color} | {garment.silhouette}</span>
+          </div>
+        </article>
       </div>
     </section>
   );
