@@ -39,8 +39,7 @@ def fitting_mock(
     request: FittingRequest,
     engine: FittingEngine = Depends(get_fitting_engine),
 ) -> FittingResponse:
-    overlay = engine.compute_overlay(request)
-    return FittingResponse(clothing_id=request.clothing_id, overlay=overlay, engine=engine.name)
+    return engine.compute_fit(request)
 
 
 @router.post("/api/capture", response_model=CaptureResponse)

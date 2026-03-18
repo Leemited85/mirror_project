@@ -21,9 +21,11 @@ class ClothesResponse(BaseModel):
 
 
 class FittingRequest(BaseModel):
-    clothing_id: str = Field(..., description="Garment ID from /api/clothes")
+    clothing_id: str = Field(..., description="Garment ID from /api/clothes or frontend upload list")
     frame_width: int = Field(..., gt=0)
     frame_height: int = Field(..., gt=0)
+    garment_width: int = Field(..., gt=0)
+    garment_height: int = Field(..., gt=0)
 
 
 class OverlayBox(BaseModel):
@@ -31,12 +33,28 @@ class OverlayBox(BaseModel):
     y: int
     width: int
     height: int
+    rotation_deg: float = 0
+
+
+class PosePoint(BaseModel):
+    x: int
+    y: int
+
+
+class PoseLandmarks(BaseModel):
+    neck: PosePoint
+    left_shoulder: PosePoint
+    right_shoulder: PosePoint
+    left_hip: PosePoint
+    right_hip: PosePoint
 
 
 class FittingResponse(BaseModel):
     clothing_id: str
     overlay: OverlayBox
+    landmarks: PoseLandmarks
     engine: str
+    confidence: float = Field(..., ge=0, le=1)
 
 
 class CaptureRequest(BaseModel):

@@ -6,14 +6,40 @@ export type Garment = {
 };
 
 export type FittingRequest = {
-  garmentId: string;
+  clothing_id: string;
+  frame_width: number;
+  frame_height: number;
+  garment_width: number;
+  garment_height: number;
+};
+
+export type OverlayBox = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  rotation_deg: number;
+};
+
+export type PosePoint = {
+  x: number;
+  y: number;
+};
+
+export type PoseLandmarks = {
+  neck: PosePoint;
+  left_shoulder: PosePoint;
+  right_shoulder: PosePoint;
+  left_hip: PosePoint;
+  right_hip: PosePoint;
 };
 
 export type FittingResponse = {
-  status: 'ok' | 'error';
-  overlayUrl: string;
-  message: string;
-  processingMs?: number;
+  clothing_id: string;
+  overlay: OverlayBox;
+  landmarks: PoseLandmarks;
+  engine: string;
+  confidence: number;
 };
 
 export type AppStatus = {

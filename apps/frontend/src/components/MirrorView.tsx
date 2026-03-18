@@ -1,4 +1,4 @@
-import type { Garment } from '../types/fitting';
+import type { FittingResponse, Garment } from '../types/fitting';
 
 type MirrorGarment = Garment & {
   brand: string;
@@ -9,40 +9,48 @@ type MirrorGarment = Garment & {
 type MirrorViewProps = {
   photoUrl: string | null;
   garment: MirrorGarment;
+  fitting: FittingResponse | null;
 };
 
-export function MirrorView({ photoUrl, garment }: MirrorViewProps) {
+export function MirrorView({ photoUrl, garment, fitting }: MirrorViewProps) {
   return (
     <section className="mirror panel">
-      <div className="sample-board">
-        <article className="sample-card">
-          <div className="sample-card-header">
-            <span>Model Photo</span>
+      <div className="fit-stage">
+        {photoUrl ? (
+          <>
+            <img src={photoUrl} alt="Uploaded model" className="fit-model-image" />
+            {fitting ? (
+              <>
+                <img
+                  src={garment.overlayUrl}
+                  alt={garment.name}
+                  className="fit-overlay-image"
+                  style={{
+                    left: `${fitting.overlay.x}px`,
+                    top: `${fitting.overlay.y}px`,
+                    width: `${fitting.overlay.width}px`,
+                    height: `${fitting.overlay.height}px`,
+                    transform: `rotate(${fitting.overlay.rotation_deg}deg)`
+                  }}
+                />
+                <div className="fit-landmarks">
+                  {Object.entries(fitting.landmarks).map(([key, point]) => (
+                    <span key={key} className="landmark-dot" style={{ left: `${point.x}px`, top: `${point.y}px` }} />
+                  ))}
+                </div>
+              </>
+            ) : null}
+          </>
+        ) : (
+          <div className="empty-state">
+            <p>Upload a model photo to run body-tracked garment fitting.</p>
           </div>
-          <div className="sample-card-body model-stage">
-            {photoUrl ? (
-              <img src={photoUrl} alt="Uploaded model" className="stage-image model-image" />
-            ) : (
-              <div className="empty-state">
-                <p>Upload a portrait photo to compare it with the selected garment.</p>
-              </div>
-            )}
-          </div>
-        </article>
-
-        <article className="sample-card">
-          <div className="sample-card-header">
-            <span>Garment Reference</span>
-          </div>
-          <div className="sample-card-body garment-stage">
-            <img src={garment.thumbnailUrl} alt={garment.name} className="stage-image garment-image" />
-          </div>
-          <div className="sample-card-footer">
-            <strong>{garment.name}</strong>
-            <span>{garment.brand}</span>
-            <span>{garment.color} | {garment.silhouette}</span>
-          </div>
-        </article>
+        )}
+      </div>
+      <div className="fit-summary">
+        <strong>{garment.name}</strong>
+        <span>{garment.brand} | {garment.color} | {garment.silhouette}</span>
+        <span>{fitting ? `${fitting.engine} confidence ${Math.round(fitting.confidence * 100)}%` : 'Waiting for fitting input'}</span>
       </div>
     </section>
   );

@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
-from app.models.schemas import FittingRequest, OverlayBox
+from app.models.schemas import FittingRequest, FittingResponse
 
 
 class FittingEngine(ABC):
     @abstractmethod
-    def compute_overlay(self, request: FittingRequest) -> OverlayBox:
-        """Return an overlay box for the requested garment and frame."""
+    def compute_fit(self, request: FittingRequest) -> FittingResponse:
+        """Return pose landmarks and a garment placement box."""
 
     @property
     @abstractmethod
