@@ -5,9 +5,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.api.routes import router
-from app.core.settings import get_settings
+from app.core.settings import ensure_runtime_directories, get_settings
 
 settings = get_settings()
+ensure_runtime_directories(settings)
 
 app = FastAPI(title=settings.app_name, version=settings.app_version)
 app.add_middleware(
