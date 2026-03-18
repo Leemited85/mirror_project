@@ -113,6 +113,7 @@ input {
 }
 
 .garment-list-title {
+  word-break: break-word;
   font-weight: 700;
   color: #2d231d;
 }
@@ -285,6 +286,7 @@ input {
 .status-panel dd {
   margin: 0;
   color: #5d554f;
+  word-break: break-word;
 }
 
 @media (max-width: 980px) {
