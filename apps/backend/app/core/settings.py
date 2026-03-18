@@ -52,3 +52,14 @@ def get_settings() -> Settings:
         mediapipe_model_asset_path=os.getenv("MEDIAPIPE_MODEL_ASSET_PATH"),
         catvton_endpoint=os.getenv("CATVTON_ENDPOINT"),
     )
+
+
+def ensure_runtime_directories(settings: Settings) -> None:
+    for path in (
+        settings.data_root,
+        settings.models_dir,
+        settings.garments_dir,
+        settings.tryon_dir,
+        settings.captures_dir,
+    ):
+        path.mkdir(parents=True, exist_ok=True)
