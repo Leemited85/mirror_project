@@ -98,6 +98,7 @@ class TryOnJob(BaseModel):
     result_image_url: str | None = None
     pose_engine: str
     vton_engine: str
+    provider_job_id: str | None = None
     warnings: list[str] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
