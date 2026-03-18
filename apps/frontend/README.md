@@ -17,6 +17,8 @@ npm install
 npm run dev
 ```
 
+Node.js 18 or newer is required. Vite 5 does not support Node 16.
+
 The app calls `POST /api/fitting/mock` on `http://localhost:8000` by default.
 Override with:
 
