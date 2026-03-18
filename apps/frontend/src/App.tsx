@@ -4,7 +4,7 @@ import { ClothesPicker } from './components/ClothesPicker';
 import { MirrorView } from './components/MirrorView';
 import { StatusPanel } from './components/StatusPanel';
 import { analyzeModel, createTryOnJob, listGarments, processGarment } from './services/fittingApi';
-import type { AppStatus, GarmentAsset, ModelAsset, PoseLandmarks, PosePoint, TryOnJob } from './types/fitting';
+import type { AppStatus, GarmentAsset, ModelAsset, TryOnJob } from './types/fitting';
 import { imageSourceToPngDataUrl, extractBase64 } from './utils/imageData';
 
 const FIT_STAGE_WIDTH = 760;
@@ -16,12 +16,9 @@ function App() {
   const [garments, setGarments] = useState<GarmentAsset[]>([]);
   const [selectedGarmentId, setSelectedGarmentId] = useState<string | null>(null);
   const [tryOnJob, setTryOnJob] = useState<TryOnJob | null>(null);
-  const [manualMode, setManualMode] = useState(false);
-  const [manualLandmarks, setManualLandmarks] = useState<PoseLandmarks | null>(null);
-  const [selectedLandmarkKey, setSelectedLandmarkKey] = useState<keyof PoseLandmarks | null>(null);
   const [status, setStatus] = useState<AppStatus>({
     phase: 'idle',
-    message: '모델 이미지를 업로드하면 VTON 작업을 시작할 수 있습니다.'
+    message: '모델 사진과 의류 사진을 올리면 AI 합성 결과를 생성합니다.'
   });
 
   const selectedGarment = garments.find((garment) => garment.id === selectedGarmentId) ?? null;
@@ -39,14 +36,14 @@ function App() {
   }, [modelPreviewUrl]);
 
   useEffect(() => {
-    if (!modelAsset || !selectedGarment || manualMode) {
+    if (!modelAsset || !selectedGarment) {
       return;
     }
 
-    void runPreview();
-  }, [modelAsset, selectedGarment, manualMode]);
+    void runTryOn();
+  }, [modelAsset, selectedGarment]);
 
-  const refreshGarments = async () => {
+  async function refreshGarments() {
     try {
       const response = await listGarments();
       setGarments(response.items);
@@ -54,11 +51,11 @@ function App() {
         setSelectedGarmentId(response.items[0].id);
       }
     } catch {
-      // 사용자가 명시적으로 액션을 취할 때 상태 메시지로 안내한다.
+      // 라이브러리가 비어 있거나 백엔드가 아직 준비되지 않은 경우는 업로드로 이어간다.
     }
-  };
+  }
 
-  const handleModelUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+  async function handleModelUpload(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = '';
     if (!file) {
@@ -71,10 +68,10 @@ function App() {
 
     const previewUrl = URL.createObjectURL(file);
     setModelPreviewUrl(previewUrl);
-
+    setTryOnJob(null);
     setStatus({
       phase: 'processing',
-      message: `${file.name} 업로드 완료. 모델 피팅 정보를 분석하고 있습니다...`,
+      message: `${file.name} 모델 사진을 분석하고 있습니다.`,
       lastUpdatedAt: new Date().toISOString()
     });
 
@@ -88,13 +85,9 @@ function App() {
       });
 
       setModelAsset(asset);
-      setManualLandmarks(asset.landmarks);
-      setSelectedLandmarkKey('neck');
-      setTryOnJob(null);
-      setManualMode(false);
       setStatus({
         phase: 'ready',
-        message: `모델 분석이 완료되었습니다. 의류를 선택하면 가상 피팅 미리보기를 시작합니다.`,
+        message: '모델 분석이 완료되었습니다. 의류를 선택하면 바로 합성을 시작합니다.',
         lastUpdatedAt: new Date().toISOString()
       });
     } catch (caught) {
@@ -105,9 +98,9 @@ function App() {
         lastUpdatedAt: new Date().toISOString()
       });
     }
-  };
+  }
 
-  const handleGarmentUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+  async function handleGarmentUpload(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = '';
     if (!file) {
@@ -116,25 +109,31 @@ function App() {
 
     setStatus({
       phase: 'processing',
-      message: `${file.name} 업로드 완료. 의류 자산을 처리하고 있습니다...`,
+      message: `${file.name} 의류 이미지를 처리하고 있습니다.`,
       lastUpdatedAt: new Date().toISOString()
     });
 
     try {
-      const dataUrl = await imageSourceToPngDataUrl(URL.createObjectURL(file));
-      const asset = await processGarment({
-        name: stripExtension(file.name),
-        category: 'top',
-        garment_image_base64: extractBase64(dataUrl)
-      });
+      const objectUrl = URL.createObjectURL(file);
+      try {
+        const dataUrl = await imageSourceToPngDataUrl(objectUrl);
+        const asset = await processGarment({
+          name: stripExtension(file.name),
+          category: 'top',
+          garment_image_base64: extractBase64(dataUrl)
+        });
 
-      setGarments((current) => [asset, ...current]);
-      setSelectedGarmentId(asset.id);
-      setStatus({
-        phase: 'ready',
-        message: `${asset.name} 의류가 처리되어 라이브러리에 추가되었습니다.`,
-        lastUpdatedAt: new Date().toISOString()
-      });
+        setGarments((current) => [asset, ...current.filter((item) => item.id !== asset.id)]);
+        setSelectedGarmentId(asset.id);
+        setTryOnJob(null);
+        setStatus({
+          phase: 'ready',
+          message: `${asset.name} 의류가 등록되었습니다. 모델과 자동 합성을 진행합니다.`,
+          lastUpdatedAt: new Date().toISOString()
+        });
+      } finally {
+        URL.revokeObjectURL(objectUrl);
+      }
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : '의류 처리에 실패했습니다.';
       setStatus({
@@ -143,26 +142,23 @@ function App() {
         lastUpdatedAt: new Date().toISOString()
       });
     }
-  };
+  }
 
-  const runPreview = async (overrideLandmarks?: PoseLandmarks) => {
+  async function runTryOn() {
     if (!modelAsset || !selectedGarment) {
       return;
     }
 
     setStatus({
       phase: 'fitting',
-      message: overrideLandmarks
-        ? `${selectedGarment.name} 의류에 수동 피팅 포인트를 적용하고 있습니다...`
-        : `${selectedGarment.name} 의류로 가상 피팅 미리보기를 생성하고 있습니다...`,
+      message: `${selectedGarment.name} 의류를 모델 사진에 합성하고 있습니다.`,
       lastUpdatedAt: new Date().toISOString()
     });
 
     try {
       const job = await createTryOnJob({
         model_id: modelAsset.id,
-        garment_id: selectedGarment.id,
-        manual_landmarks: overrideLandmarks
+        garment_id: selectedGarment.id
       });
       setTryOnJob(job);
       setStatus({
@@ -171,16 +167,16 @@ function App() {
         lastUpdatedAt: new Date().toISOString()
       });
     } catch (caught) {
-      const message = caught instanceof Error ? caught.message : '가상 피팅 미리보기에 실패했습니다.';
+      const message = caught instanceof Error ? caught.message : '합성 이미지 생성에 실패했습니다.';
       setStatus({
         phase: 'error',
         message,
         lastUpdatedAt: new Date().toISOString()
       });
     }
-  };
+  }
 
-  const handleGarmentSelect = (garment: GarmentAsset) => {
+  function handleGarmentSelect(garment: GarmentAsset) {
     setSelectedGarmentId(garment.id);
     setTryOnJob(null);
     setStatus({
@@ -188,43 +184,13 @@ function App() {
       message: `${garment.name} 의류를 선택했습니다.`,
       lastUpdatedAt: new Date().toISOString()
     });
-  };
+  }
 
-  const handleManualToggle = () => {
-    const next = !manualMode;
-    setManualMode(next);
-    setTryOnJob(null);
-    setManualLandmarks(modelAsset?.landmarks ?? null);
-    setSelectedLandmarkKey('neck');
-    setStatus({
-      phase: next ? 'processing' : 'ready',
-      message: next
-        ? '수동 피팅 포인트 편집을 켰습니다. 포인트를 선택한 뒤 이미지에서 원하는 위치를 클릭하세요.'
-        : '수동 피팅 포인트 편집을 종료했습니다.',
-      lastUpdatedAt: new Date().toISOString()
-    });
-  };
-
-  const handleApplyManualPoints = () => {
-    if (!manualLandmarks) {
-      return;
-    }
-    void runPreview(manualLandmarks);
-  };
-
-  const handleLandmarkChange = (key: keyof PoseLandmarks, point: PosePoint) => {
-    setManualLandmarks((current) => ({
-      ...(current ?? createDefaultLandmarks()),
-      [key]: point
-    }));
-    setSelectedLandmarkKey(key);
-  };
-
-  const handleCapture = () => {
+  function handleCapture() {
     if (!tryOnJob?.result_image_url) {
       setStatus({
         phase: 'error',
-        message: '아직 저장할 최종 합성 이미지가 없습니다.',
+        message: '저장할 합성 결과 이미지가 아직 없습니다.',
         lastUpdatedAt: new Date().toISOString()
       });
       return;
@@ -236,18 +202,20 @@ function App() {
     link.click();
     setStatus({
       phase: 'ready',
-      message: '최종 합성 이미지를 저장했습니다.',
+      message: '합성 결과 이미지를 저장했습니다.',
       lastUpdatedAt: new Date().toISOString()
     });
-  };
+  }
 
   return (
     <main className="app">
       <header className="app-header">
         <div>
-          <p className="eyebrow">가상 피팅 워크스페이스</p>
-          <h1>버추얼 피팅 미러</h1>
-          <p className="intro">1. 모델 분석 2. 의류 자산 등록 3. 가상 피팅 작업 실행 4. 결과 미리보기 5. 최종 이미지 저장</p>
+          <p className="eyebrow">AI 가상 피팅</p>
+          <h1>모델 이미지 합성 스튜디오</h1>
+          <p className="intro">
+            모델 사진과 의류 이미지를 업로드하면 백엔드에서 의류를 처리한 뒤 최종 합성 이미지를 생성합니다.
+          </p>
         </div>
         <div className="header-actions">
           <label className="upload-button">
@@ -255,7 +223,7 @@ function App() {
             <input type="file" accept="image/*" onChange={handleModelUpload} />
           </label>
           <label className="secondary-upload-button">
-            <span>의류 추가</span>
+            <span>의류 업로드</span>
             <input type="file" accept="image/*" onChange={handleGarmentUpload} />
           </label>
         </div>
@@ -271,41 +239,23 @@ function App() {
 
         <div className="center-column">
           <section className="panel garment-summary">
-            <span className="photo-label">1단계</span>
-            <strong>{modelAsset ? modelAsset.name : '모델 분석 대기 중'}</strong>
+            <span className="photo-label">모델</span>
+            <strong>{modelAsset ? modelAsset.name : '모델 사진 대기 중'}</strong>
             <span className="garment-meta">
               {modelAsset
-                ? `${modelAsset.pose_engine} | 신뢰도 ${Math.round(modelAsset.confidence * 100)}%`
-                : '모델 이미지를 업로드하면 피팅 포인트를 추출합니다'}
+                ? `${modelAsset.frame_width} x ${modelAsset.frame_height} | 신뢰도 ${Math.round(modelAsset.confidence * 100)}%`
+                : '모델 사진을 올리면 분석 후 합성 준비를 시작합니다.'}
             </span>
           </section>
 
           <section className="panel garment-summary">
-            <span className="photo-label">2단계</span>
+            <span className="photo-label">의류</span>
             <strong>{selectedGarment ? selectedGarment.name : '의류 선택 대기 중'}</strong>
             <span className="garment-meta">
               {selectedGarment
                 ? `${translateCategory(selectedGarment.category)} | ${selectedGarment.width} x ${selectedGarment.height}`
-                : '업로드하거나 처리된 의류 자산을 선택해 주세요'}
+                : '등록된 의류를 고르거나 새 의류를 업로드하세요.'}
             </span>
-          </section>
-
-          <section className="panel manual-controls">
-            <strong>3단계: 미리보기 제어</strong>
-            <p>모델 분석 결과의 피팅 포인트가 실제 신체와 맞지 않을 때만 수동 편집을 사용하세요.</p>
-            <div className="manual-action-row">
-              <button type="button" className="secondary-action-button" onClick={handleManualToggle} disabled={!modelAsset}>
-                {manualMode ? '수동 편집 종료' : '핏 포인트 편집'}
-              </button>
-              <button
-                type="button"
-                className="secondary-action-button"
-                onClick={handleApplyManualPoints}
-                disabled={!manualMode || !manualLandmarks || !selectedGarment || !modelAsset}
-              >
-                포인트 적용
-              </button>
-            </div>
           </section>
 
           <MirrorView
@@ -313,30 +263,15 @@ function App() {
             garment={selectedGarment}
             job={tryOnJob}
             modelPreviewUrl={modelPreviewUrl}
-            manualMode={manualMode}
-            manualLandmarks={manualLandmarks}
-            selectedLandmarkKey={selectedLandmarkKey}
-            onLandmarkChange={handleLandmarkChange}
-            onLandmarkSelect={setSelectedLandmarkKey}
           />
 
-          <CaptureButton onCapture={handleCapture} disabled={!tryOnJob?.result_image_url} label="최종 이미지 저장" />
+          <CaptureButton onCapture={handleCapture} disabled={!tryOnJob?.result_image_url} />
         </div>
 
         <StatusPanel status={status} />
       </div>
     </main>
   );
-}
-
-function createDefaultLandmarks(): PoseLandmarks {
-  return {
-    neck: { x: Math.round(FIT_STAGE_WIDTH * 0.5), y: Math.round(FIT_STAGE_HEIGHT * 0.18) },
-    left_shoulder: { x: Math.round(FIT_STAGE_WIDTH * 0.34), y: Math.round(FIT_STAGE_HEIGHT * 0.24) },
-    right_shoulder: { x: Math.round(FIT_STAGE_WIDTH * 0.66), y: Math.round(FIT_STAGE_HEIGHT * 0.24) },
-    left_hip: { x: Math.round(FIT_STAGE_WIDTH * 0.4), y: Math.round(FIT_STAGE_HEIGHT * 0.62) },
-    right_hip: { x: Math.round(FIT_STAGE_WIDTH * 0.6), y: Math.round(FIT_STAGE_HEIGHT * 0.62) }
-  };
 }
 
 function stripExtension(filename: string) {
@@ -366,7 +301,7 @@ function translateJobStatus(status: TryOnJob['status']) {
 
 function buildJobMessage(job: TryOnJob) {
   const warningText = job.warnings.length ? ` 경고: ${job.warnings.join(' ')}` : '';
-  return `${job.pose_engine} + ${job.vton_engine} ${translateJobStatus(job.status)}.${warningText}`.trim();
+  return `합성 작업 ${translateJobStatus(job.status)}.${warningText}`.trim();
 }
 
 export default App;
