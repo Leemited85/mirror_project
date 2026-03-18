@@ -3,9 +3,9 @@ import { CaptureButton } from './components/CaptureButton';
 import { ClothesPicker } from './components/ClothesPicker';
 import { MirrorView } from './components/MirrorView';
 import { StatusPanel } from './components/StatusPanel';
-import { analyzeModel, createTryOnJob, listGarments, processGarment } from './services/fittingApi';
-import type { AppStatus, GarmentAsset, ModelAsset, TryOnJob } from './types/fitting';
-import { imageSourceToPngDataUrl, extractBase64 } from './utils/imageData';
+import { analyzeModel, createTryOnJob, getProviderStatus, listGarments, processGarment } from './services/fittingApi';
+import type { AppStatus, GarmentAsset, ModelAsset, ProviderStatus, TryOnJob } from './types/fitting';
+import { extractBase64, imageSourceToPngDataUrl } from './utils/imageData';
 
 const FIT_STAGE_WIDTH = 760;
 const FIT_STAGE_HEIGHT = 920;
@@ -16,6 +16,7 @@ function App() {
   const [garments, setGarments] = useState<GarmentAsset[]>([]);
   const [selectedGarmentId, setSelectedGarmentId] = useState<string | null>(null);
   const [tryOnJob, setTryOnJob] = useState<TryOnJob | null>(null);
+  const [providerStatus, setProviderStatus] = useState<ProviderStatus | null>(null);
   const [status, setStatus] = useState<AppStatus>({
     phase: 'idle',
     message: '모델 사진과 의류 사진을 올리면 AI 합성 결과를 생성합니다.'
@@ -25,6 +26,7 @@ function App() {
 
   useEffect(() => {
     void refreshGarments();
+    void refreshProviderStatus();
   }, []);
 
   useEffect(() => {
@@ -51,7 +53,16 @@ function App() {
         setSelectedGarmentId(response.items[0].id);
       }
     } catch {
-      // 라이브러리가 비어 있거나 백엔드가 아직 준비되지 않은 경우는 업로드로 이어간다.
+      // 백엔드 연결 전에는 업로드 플로우로 이어간다.
+    }
+  }
+
+  async function refreshProviderStatus() {
+    try {
+      const response = await getProviderStatus();
+      setProviderStatus(response);
+    } catch {
+      setProviderStatus(null);
     }
   }
 
@@ -214,7 +225,7 @@ function App() {
           <p className="eyebrow">AI 가상 피팅</p>
           <h1>모델 이미지 합성 스튜디오</h1>
           <p className="intro">
-            모델 사진과 의류 이미지를 업로드하면 백엔드에서 의류를 처리한 뒤 최종 합성 이미지를 생성합니다.
+            모델 사진과 의류 이미지를 업로드하면 백엔드에서 ComfyUI 또는 기본 합성 엔진으로 최종 결과 이미지를 생성합니다.
           </p>
         </div>
         <div className="header-actions">
@@ -238,6 +249,23 @@ function App() {
         />
 
         <div className="center-column">
+          <section className="panel garment-summary">
+            <span className="photo-label">현재 엔진</span>
+            <strong>{providerStatus ? translateProvider(providerStatus.vton_provider) : '백엔드 연결 확인 중'}</strong>
+            <span className="garment-meta">
+              {providerStatus
+                ? `포즈: ${translateProvider(providerStatus.pose_provider)} | 합성: ${translateProvider(providerStatus.vton_provider)}`
+                : '백엔드에서 provider 설정을 불러오면 현재 합성 엔진이 표시됩니다.'}
+            </span>
+            {providerStatus?.vton_provider === 'comfyui' ? (
+              <span className="garment-meta">
+                {providerStatus.comfyui_base_url
+                  ? `ComfyUI 주소: ${providerStatus.comfyui_base_url}`
+                  : 'ComfyUI 주소가 아직 설정되지 않았습니다.'}
+              </span>
+            ) : null}
+          </section>
+
           <section className="panel garment-summary">
             <span className="photo-label">모델</span>
             <strong>{modelAsset ? modelAsset.name : '모델 사진 대기 중'}</strong>
@@ -288,6 +316,17 @@ function translateCategory(category: GarmentAsset['category']) {
   return labels[category];
 }
 
+function translateProvider(provider: string) {
+  const labels: Record<string, string> = {
+    mock: '기본 Mock',
+    mediapipe: 'MediaPipe',
+    catvton: 'CatVTON',
+    comfyui: 'ComfyUI'
+  };
+
+  return labels[provider] ?? provider;
+}
+
 function translateJobStatus(status: TryOnJob['status']) {
   const labels: Record<TryOnJob['status'], string> = {
     queued: '대기 중',
@@ -301,7 +340,8 @@ function translateJobStatus(status: TryOnJob['status']) {
 
 function buildJobMessage(job: TryOnJob) {
   const warningText = job.warnings.length ? ` 경고: ${job.warnings.join(' ')}` : '';
-  return `합성 작업 ${translateJobStatus(job.status)}.${warningText}`.trim();
+  const providerText = job.provider_job_id ? ` ComfyUI 작업 ID: ${job.provider_job_id}` : '';
+  return `합성 작업 ${translateJobStatus(job.status)}. 엔진: ${job.vton_engine}.${providerText}${warningText}`.trim();
 }
 
 export default App;

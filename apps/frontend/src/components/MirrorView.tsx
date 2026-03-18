@@ -43,6 +43,8 @@ export function MirrorView({ model, garment, job, modelPreviewUrl }: MirrorViewP
         <span>모델: {model?.name ?? '미선택'}</span>
         <span>의류: {garment?.name ?? '미선택'}</span>
         <span>상태: {translatePreviewStatus(job)}</span>
+        <span>합성 엔진: {job?.vton_engine ?? '미실행'}</span>
+        {job?.provider_job_id ? <span>ComfyUI 작업 ID: {job.provider_job_id}</span> : null}
       </div>
     </section>
   );
