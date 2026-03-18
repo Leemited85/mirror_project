@@ -24,7 +24,7 @@ function translatePhase(phase: AppStatus['phase']) {
   const labels: Record<AppStatus['phase'], string> = {
     idle: '대기',
     'camera-ready': '카메라 준비',
-    processing: '분석 중',
+    processing: '처리 중',
     fitting: '합성 중',
     ready: '완료',
     error: '오류'
