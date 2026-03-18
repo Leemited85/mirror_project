@@ -1,34 +1,42 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.core.settings import Settings, get_settings
 from app.models.schemas import (
     CaptureRequest,
     CaptureResponse,
-    ClothesResponse,
-    FittingRequest,
-    FittingResponse,
+    GarmentAsset,
+    GarmentListResponse,
+    GarmentProcessRequest,
     HealthResponse,
     ModelAnalyzeRequest,
-    ModelAnalyzeResponse,
-    TryOnRequest,
-    TryOnResponse,
+    ModelAsset,
+    ModelListResponse,
+    TryOnJob,
+    TryOnJobRequest,
+)
+from app.services.asset_store import (
+    create_asset_id,
+    ensure_directory,
+    list_garment_assets,
+    list_model_assets,
+    load_garment_asset,
+    load_model_asset,
+    load_tryon_job,
+    now_utc,
+    save_garment_asset,
+    save_model_asset,
+    save_tryon_job,
 )
 from app.services.capture_service import save_capture
-from app.services.clothes_service import list_clothes
-from app.services.fitting.base import FittingEngine
 from app.services.fitting.geometry import compute_overlay_from_landmarks
-from app.services.fitting.mock_engine import MockFittingEngine
-from app.services.image_utils import decode_base64_image, encode_png_base64
+from app.services.garment_processing import remove_background
+from app.services.image_utils import decode_base64_image, save_image_bytes
 from app.services.pose import create_pose_provider
 from app.services.vton import create_vton_provider
 
 router = APIRouter()
-
-
-def get_fitting_engine() -> FittingEngine:
-    return MockFittingEngine()
 
 
 @router.get("/health", response_model=HealthResponse)
@@ -36,95 +44,166 @@ def health() -> HealthResponse:
     return HealthResponse()
 
 
-@router.get("/api/clothes", response_model=ClothesResponse)
-def clothes(settings: Settings = Depends(get_settings)) -> ClothesResponse:
-    items = list_clothes(settings.clothes_dir, settings.static_clothes_url_prefix)
-    return ClothesResponse(items=items)
-
-
-@router.post("/api/fitting/mock", response_model=FittingResponse)
-def fitting_mock(
-    request: FittingRequest,
-    engine: FittingEngine = Depends(get_fitting_engine),
-) -> FittingResponse:
-    return engine.compute_fit(request)
-
-
-@router.post("/api/models/analyze", response_model=ModelAnalyzeResponse)
+@router.post("/api/models/analyze", response_model=ModelAsset)
 def analyze_model(
     request: ModelAnalyzeRequest,
     settings: Settings = Depends(get_settings),
-) -> ModelAnalyzeResponse:
+) -> ModelAsset:
     model_bytes = decode_base64_image(request.model_image_base64)
     pose_provider = create_pose_provider(settings)
     landmarks, confidence = pose_provider.detect(model_bytes, request.frame_width, request.frame_height)
 
-    return ModelAnalyzeResponse(
-        status="ok",
+    asset_id = create_asset_id("model")
+    asset_dir = ensure_directory(settings.models_dir / asset_id)
+    original_path = asset_dir / "original.png"
+    save_image_bytes(original_path, model_bytes)
+
+    created_at = now_utc()
+    asset = ModelAsset(
+        id=asset_id,
+        name=request.name or asset_id,
+        original_image_url=f"{settings.static_data_url_prefix}/models/{asset_id}/original.png",
+        frame_width=request.frame_width,
+        frame_height=request.frame_height,
         landmarks=landmarks,
         pose_engine=pose_provider.name,
         confidence=confidence,
+        created_at=created_at,
     )
+    save_model_asset(asset_dir, asset)
+    return asset
 
 
-@router.post("/api/try-on/mock", response_model=TryOnResponse)
-def try_on_mock(
-    request: TryOnRequest,
+@router.get("/api/models", response_model=ModelListResponse)
+def list_models(settings: Settings = Depends(get_settings)) -> ModelListResponse:
+    return ModelListResponse(items=list_model_assets(settings.models_dir))
+
+
+@router.post("/api/garments/process", response_model=GarmentAsset)
+def process_garment(
+    request: GarmentProcessRequest,
     settings: Settings = Depends(get_settings),
-) -> TryOnResponse:
-    model_bytes = decode_base64_image(request.model_image_base64)
+) -> GarmentAsset:
     garment_bytes = decode_base64_image(request.garment_image_base64)
+    processed_bytes, width, height = remove_background(garment_bytes)
+
+    asset_id = create_asset_id("garment")
+    asset_dir = ensure_directory(settings.garments_dir / asset_id)
+    original_path = asset_dir / "original.png"
+    processed_path = asset_dir / "processed.png"
+    save_image_bytes(original_path, garment_bytes)
+    save_image_bytes(processed_path, processed_bytes)
+
+    created_at = now_utc()
+    asset = GarmentAsset(
+        id=asset_id,
+        name=request.name or asset_id,
+        category=request.category,
+        original_image_url=f"{settings.static_data_url_prefix}/garments/{asset_id}/original.png",
+        processed_image_url=f"{settings.static_data_url_prefix}/garments/{asset_id}/processed.png",
+        width=width,
+        height=height,
+        created_at=created_at,
+    )
+    save_garment_asset(asset_dir, asset)
+    return asset
+
+
+@router.get("/api/garments", response_model=GarmentListResponse)
+def list_garments(settings: Settings = Depends(get_settings)) -> GarmentListResponse:
+    return GarmentListResponse(items=list_garment_assets(settings.garments_dir))
+
+
+@router.post("/api/try-on/jobs", response_model=TryOnJob)
+def create_try_on_job(
+    request: TryOnJobRequest,
+    settings: Settings = Depends(get_settings),
+) -> TryOnJob:
+    model_dir = settings.models_dir / request.model_id
+    garment_dir = settings.garments_dir / request.garment_id
+
+    if not model_dir.exists():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Model asset not found")
+    if not garment_dir.exists():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Garment asset not found")
+
+    model_asset = load_model_asset(model_dir)
+    garment_asset = load_garment_asset(garment_dir)
 
     pose_provider = create_pose_provider(settings)
     vton_provider = create_vton_provider(settings)
 
+    landmarks = request.manual_landmarks or model_asset.landmarks
+    confidence = 1.0 if request.manual_landmarks else model_asset.confidence
     warnings: list[str] = []
     if request.manual_landmarks:
-        landmarks = request.manual_landmarks
-        confidence = 1.0
         warnings.append("Manual fitting landmarks supplied by the frontend.")
-    else:
-        landmarks, confidence = pose_provider.detect(model_bytes, request.frame_width, request.frame_height)
+
     overlay = compute_overlay_from_landmarks(
         landmarks=landmarks,
-        frame_height=request.frame_height,
-        garment_width=request.garment_width,
-        garment_height=request.garment_height,
-    )
-    fitting = FittingResponse(
-        clothing_id=request.clothing_id,
-        overlay=overlay,
-        landmarks=landmarks,
-        engine=pose_provider.name,
-        confidence=confidence,
+        frame_height=model_asset.frame_height,
+        garment_width=garment_asset.width,
+        garment_height=garment_asset.height,
     )
 
-    result_bytes = None
+    job_id = create_asset_id("tryon")
+    job_dir = ensure_directory(settings.tryon_dir / job_id)
+
+    model_bytes = (model_dir / "original.png").read_bytes()
+    garment_bytes = (garment_dir / "processed.png").read_bytes()
+
+    result_path = None
+    job_status = "running"
     try:
         result_bytes, provider_warnings = vton_provider.compose(
             model_image_bytes=model_bytes,
             garment_image_bytes=garment_bytes,
             overlay=overlay,
             landmarks=landmarks,
-            frame_width=request.frame_width,
-            frame_height=request.frame_height,
+            frame_width=model_asset.frame_width,
+            frame_height=model_asset.frame_height,
         )
         warnings.extend(provider_warnings)
-        status = "ok"
+        if result_bytes:
+            result_path = job_dir / "result.png"
+            save_image_bytes(result_path, result_bytes)
+        job_status = "succeeded"
     except RuntimeError as exc:
         warnings.append(str(exc))
-        status = "degraded"
+        job_status = "failed"
 
-    result_base64 = encode_png_base64(result_bytes) if result_bytes else None
-
-    return TryOnResponse(
-        status=status,
-        fitting=fitting,
-        result_image_base64=result_base64,
+    timestamp = now_utc()
+    job = TryOnJob(
+        id=job_id,
+        model_id=model_asset.id,
+        garment_id=garment_asset.id,
+        status=job_status,
+        fitting={
+            "clothing_id": garment_asset.id,
+            "overlay": overlay,
+            "landmarks": landmarks,
+            "engine": pose_provider.name,
+            "confidence": confidence,
+        },
+        result_image_url=(
+            f"{settings.static_data_url_prefix}/tryon/{job_id}/result.png" if result_path else None
+        ),
         pose_engine=pose_provider.name,
         vton_engine=vton_provider.name,
         warnings=warnings,
+        created_at=timestamp,
+        updated_at=timestamp,
     )
+    save_tryon_job(job_dir, job)
+    return job
+
+
+@router.get("/api/try-on/jobs/{job_id}", response_model=TryOnJob)
+def get_try_on_job(job_id: str, settings: Settings = Depends(get_settings)) -> TryOnJob:
+    job_dir = settings.tryon_dir / job_id
+    if not job_dir.exists():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Try-on job not found")
+    return load_tryon_job(job_dir)
 
 
 @router.post("/api/capture", response_model=CaptureResponse)

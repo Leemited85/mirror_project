@@ -1,23 +1,13 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import List
+from typing import List, Literal
 
 from pydantic import BaseModel, Field
 
 
 class HealthResponse(BaseModel):
     status: str = "ok"
-
-
-class ClothesItem(BaseModel):
-    id: str
-    name: str
-    asset_url: str
-
-
-class ClothesResponse(BaseModel):
-    items: List[ClothesItem]
 
 
 class PosePoint(BaseModel):
@@ -41,14 +31,6 @@ class OverlayBox(BaseModel):
     rotation_deg: float = 0
 
 
-class FittingRequest(BaseModel):
-    clothing_id: str = Field(..., description="Garment ID from the frontend garment list")
-    frame_width: int = Field(..., gt=0)
-    frame_height: int = Field(..., gt=0)
-    garment_width: int = Field(..., gt=0)
-    garment_height: int = Field(..., gt=0)
-
-
 class FittingResponse(BaseModel):
     clothing_id: str
     overlay: OverlayBox
@@ -57,38 +39,68 @@ class FittingResponse(BaseModel):
     confidence: float = Field(..., ge=0, le=1)
 
 
-class TryOnRequest(BaseModel):
-    clothing_id: str
-    model_image_base64: str = Field(..., description="Raw base64 payload, without data URI prefix")
-    garment_image_base64: str = Field(..., description="Raw base64 payload, without data URI prefix")
-    frame_width: int = Field(..., gt=0)
-    frame_height: int = Field(..., gt=0)
-    garment_width: int = Field(..., gt=0)
-    garment_height: int = Field(..., gt=0)
-    manual_landmarks: PoseLandmarks | None = None
-
-
 class ModelAnalyzeRequest(BaseModel):
+    name: str | None = None
     model_image_base64: str = Field(..., description="Raw base64 payload, without data URI prefix")
     frame_width: int = Field(..., gt=0)
     frame_height: int = Field(..., gt=0)
 
 
-class ModelAnalyzeResponse(BaseModel):
-    status: str
+class ModelAsset(BaseModel):
+    id: str
+    name: str
+    original_image_url: str
+    frame_width: int
+    frame_height: int
     landmarks: PoseLandmarks
     pose_engine: str
     confidence: float = Field(..., ge=0, le=1)
-    warnings: list[str] = Field(default_factory=list)
+    created_at: datetime
 
 
-class TryOnResponse(BaseModel):
-    status: str
-    fitting: FittingResponse
-    result_image_base64: str | None = None
+class ModelListResponse(BaseModel):
+    items: List[ModelAsset]
+
+
+class GarmentProcessRequest(BaseModel):
+    name: str | None = None
+    category: Literal["top", "bottom", "dress"] = "top"
+    garment_image_base64: str = Field(..., description="Raw base64 payload, without data URI prefix")
+
+
+class GarmentAsset(BaseModel):
+    id: str
+    name: str
+    category: str
+    original_image_url: str
+    processed_image_url: str
+    width: int
+    height: int
+    created_at: datetime
+
+
+class GarmentListResponse(BaseModel):
+    items: List[GarmentAsset]
+
+
+class TryOnJobRequest(BaseModel):
+    model_id: str
+    garment_id: str
+    manual_landmarks: PoseLandmarks | None = None
+
+
+class TryOnJob(BaseModel):
+    id: str
+    model_id: str
+    garment_id: str
+    status: Literal["queued", "running", "succeeded", "failed"]
+    fitting: FittingResponse | None = None
+    result_image_url: str | None = None
     pose_engine: str
     vton_engine: str
     warnings: list[str] = Field(default_factory=list)
+    created_at: datetime
+    updated_at: datetime
 
 
 class CaptureRequest(BaseModel):
