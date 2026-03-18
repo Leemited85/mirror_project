@@ -1,4 +1,4 @@
-import type { GarmentAsset, ModelAsset, PoseLandmarks, TryOnJob } from '../types/fitting';
+import type { GarmentAsset, ModelAsset, PoseLandmarks, ProviderStatus, TryOnJob } from '../types/fitting';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
 const API_ORIGIN = new URL(API_BASE_URL).origin;
@@ -86,4 +86,8 @@ export function createTryOnJob(payload: { model_id: string; garment_id: string; 
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
   });
+}
+
+export function getProviderStatus() {
+  return apiRequest<ProviderStatus>('/api/system/providers');
 }

@@ -59,9 +59,17 @@ export type TryOnJob = {
   result_image_url: string | null;
   pose_engine: string;
   vton_engine: string;
+  provider_job_id?: string | null;
   warnings: string[];
   created_at: string;
   updated_at: string;
+};
+
+export type ProviderStatus = {
+  pose_provider: string;
+  vton_provider: string;
+  comfyui_base_url: string | null;
+  comfyui_workflow_path: string | null;
 };
 
 export type AppStatus = {
