@@ -3,7 +3,7 @@ import { CaptureButton } from './components/CaptureButton';
 import { ClothesPicker } from './components/ClothesPicker';
 import { MirrorView } from './components/MirrorView';
 import { StatusPanel } from './components/StatusPanel';
-import { requestTryOn } from './services/fittingApi';
+import { requestModelAnalysis, requestTryOn } from './services/fittingApi';
 import type { AppStatus, FittingResponse, Garment, PoseLandmarks, PosePoint } from './types/fitting';
 import { imageSourceToPngDataUrl, extractBase64 } from './utils/imageData';
 import { processGarmentImage } from './utils/garmentProcessing';
@@ -46,6 +46,7 @@ function App() {
   const [fitting, setFitting] = useState<FittingResponse | null>(null);
   const [resultImageUrl, setResultImageUrl] = useState<string | null>(null);
   const [manualMode, setManualMode] = useState(false);
+  const [modelLandmarks, setModelLandmarks] = useState<PoseLandmarks | null>(null);
   const [manualLandmarks, setManualLandmarks] = useState<PoseLandmarks | null>(null);
   const [selectedLandmarkKey, setSelectedLandmarkKey] = useState<keyof PoseLandmarks | null>(null);
   const [status, setStatus] = useState<AppStatus>({
@@ -64,7 +65,7 @@ function App() {
   const selectedGarment = garments.find((garment) => garment.id === selectedGarmentId) ?? garments[0];
 
   useEffect(() => {
-    if (!photoUrl || !selectedGarment || manualMode) {
+    if (!photoUrl || !selectedGarment || !modelLandmarks || manualMode) {
       if (!photoUrl) {
         setFitting(null);
         setResultImageUrl(null);
@@ -73,7 +74,7 @@ function App() {
     }
 
     void runTryOn();
-  }, [photoUrl, selectedGarment, manualMode]);
+  }, [photoUrl, selectedGarment, modelLandmarks, manualMode]);
 
   const runTryOn = async (overrideLandmarks?: PoseLandmarks) => {
     if (!photoUrl || !selectedGarment) {
@@ -141,13 +142,42 @@ function App() {
     setFitting(null);
     setResultImageUrl(null);
     setManualMode(false);
-    setManualLandmarks(createDefaultLandmarks());
+    setModelLandmarks(null);
+    setManualLandmarks(null);
     setSelectedLandmarkKey('neck');
     setStatus({
       phase: 'processing',
-      message: `${file.name} loaded. Preparing pose-guided try-on.`,
+      message: `${file.name} loaded. Analyzing model fitting points...`,
       lastUpdatedAt: new Date().toISOString()
     });
+
+    void analyzeModel(nextPhotoUrl);
+  };
+
+  const analyzeModel = async (modelUrl: string) => {
+    try {
+      const modelDataUrl = await imageSourceToPngDataUrl(modelUrl);
+      const response = await requestModelAnalysis({
+        model_image_base64: extractBase64(modelDataUrl),
+        frame_width: FIT_STAGE_WIDTH,
+        frame_height: FIT_STAGE_HEIGHT
+      });
+
+      setModelLandmarks(response.landmarks);
+      setManualLandmarks(response.landmarks);
+      setStatus({
+        phase: 'ready',
+        message: `Model fitting points analyzed with ${response.pose_engine}. Select a garment to continue.`,
+        lastUpdatedAt: new Date().toISOString()
+      });
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : 'Model analysis failed.';
+      setStatus({
+        phase: 'error',
+        message,
+        lastUpdatedAt: new Date().toISOString()
+      });
+    }
   };
 
   const handleGarmentUpload = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -187,7 +217,7 @@ function App() {
       setSelectedGarmentId(nextGarment.id);
       setStatus({
         phase: 'ready',
-        message: `${file.name} processed and registered in the garment list.`,
+        message: `${file.name} processed and registered in the garment list. Select it to match with the analyzed model.`,
         lastUpdatedAt: new Date().toISOString()
       });
     } catch (caught) {
@@ -239,7 +269,7 @@ function App() {
 
     if (nextManualMode) {
       setResultImageUrl(null);
-      setManualLandmarks(fitting?.landmarks ?? manualLandmarks ?? createDefaultLandmarks());
+      setManualLandmarks(fitting?.landmarks ?? manualLandmarks ?? modelLandmarks ?? createDefaultLandmarks());
       setSelectedLandmarkKey('neck');
       setStatus({
         phase: 'processing',
@@ -284,7 +314,7 @@ function App() {
         <div>
           <p className="eyebrow">Pose + VTON Pipeline</p>
           <h1>Virtual Fitting Mirror</h1>
-          <p className="intro">If auto pose tracking cannot separate the model correctly, switch to manual fit points and drag the neck, shoulders, and hips before re-running the try-on.</p>
+          <p className="intro">1. Upload a model. 2. Analyze fitting points. 3. Select or register a garment. 4. Preview the matched fitting. 5. Save the final composited image.</p>
         </div>
         <div className="header-actions">
           <label className="secondary-upload-button">
@@ -318,7 +348,7 @@ function App() {
           </div>
           <div className="panel manual-controls">
             <strong>Fit Points</strong>
-            <p>Use manual editing when the body cannot be tracked clearly from the uploaded photo.</p>
+            <p>After model analysis, use manual editing when the detected fitting points do not match the person correctly.</p>
             <div className="manual-action-row">
               <button type="button" className="secondary-action-button" onClick={handleManualToggle} disabled={!photoUrl}>
                 {manualMode ? 'Exit Manual Edit' : 'Edit Fit Points'}

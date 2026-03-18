@@ -10,6 +10,8 @@ from app.models.schemas import (
     FittingRequest,
     FittingResponse,
     HealthResponse,
+    ModelAnalyzeRequest,
+    ModelAnalyzeResponse,
     TryOnRequest,
     TryOnResponse,
 )
@@ -46,6 +48,23 @@ def fitting_mock(
     engine: FittingEngine = Depends(get_fitting_engine),
 ) -> FittingResponse:
     return engine.compute_fit(request)
+
+
+@router.post("/api/models/analyze", response_model=ModelAnalyzeResponse)
+def analyze_model(
+    request: ModelAnalyzeRequest,
+    settings: Settings = Depends(get_settings),
+) -> ModelAnalyzeResponse:
+    model_bytes = decode_base64_image(request.model_image_base64)
+    pose_provider = create_pose_provider(settings)
+    landmarks, confidence = pose_provider.detect(model_bytes, request.frame_width, request.frame_height)
+
+    return ModelAnalyzeResponse(
+        status="ok",
+        landmarks=landmarks,
+        pose_engine=pose_provider.name,
+        confidence=confidence,
+    )
 
 
 @router.post("/api/try-on/mock", response_model=TryOnResponse)
