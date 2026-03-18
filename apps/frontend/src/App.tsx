@@ -4,7 +4,7 @@ import { ClothesPicker } from './components/ClothesPicker';
 import { MirrorView } from './components/MirrorView';
 import { StatusPanel } from './components/StatusPanel';
 import { requestTryOn } from './services/fittingApi';
-import type { AppStatus, FittingResponse, Garment } from './types/fitting';
+import type { AppStatus, FittingResponse, Garment, PoseLandmarks, PosePoint } from './types/fitting';
 import { imageSourceToPngDataUrl, extractBase64 } from './utils/imageData';
 import { processGarmentImage } from './utils/garmentProcessing';
 
@@ -45,6 +45,8 @@ function App() {
   const [photoName, setPhotoName] = useState<string>('No photo selected');
   const [fitting, setFitting] = useState<FittingResponse | null>(null);
   const [resultImageUrl, setResultImageUrl] = useState<string | null>(null);
+  const [manualMode, setManualMode] = useState(false);
+  const [manualLandmarks, setManualLandmarks] = useState<PoseLandmarks | null>(null);
   const [status, setStatus] = useState<AppStatus>({
     phase: 'idle',
     message: 'Upload a model photo and select a processed garment to run fitting.'
@@ -61,70 +63,66 @@ function App() {
   const selectedGarment = garments.find((garment) => garment.id === selectedGarmentId) ?? garments[0];
 
   useEffect(() => {
-    if (!photoUrl || !selectedGarment) {
-      setFitting(null);
-      setResultImageUrl(null);
+    if (!photoUrl || !selectedGarment || manualMode) {
+      if (!photoUrl) {
+        setFitting(null);
+        setResultImageUrl(null);
+      }
       return;
     }
 
-    let cancelled = false;
+    void runTryOn();
+  }, [photoUrl, selectedGarment, manualMode]);
 
-    const runTryOn = async () => {
-      setStatus({
-        phase: 'fitting',
-        message: `Tracking pose and running try-on for ${selectedGarment.name}...`,
-        lastUpdatedAt: new Date().toISOString()
+  const runTryOn = async (overrideLandmarks?: PoseLandmarks) => {
+    if (!photoUrl || !selectedGarment) {
+      return;
+    }
+
+    setStatus({
+      phase: 'fitting',
+      message: overrideLandmarks
+        ? `Applying manual fit points for ${selectedGarment.name}...`
+        : `Tracking pose and running try-on for ${selectedGarment.name}...`,
+      lastUpdatedAt: new Date().toISOString()
+    });
+
+    try {
+      const modelDataUrl = await imageSourceToPngDataUrl(photoUrl);
+      const garmentDataUrl = await imageSourceToPngDataUrl(selectedGarment.overlayUrl);
+
+      const response = await requestTryOn({
+        clothing_id: selectedGarment.id,
+        model_image_base64: extractBase64(modelDataUrl),
+        garment_image_base64: extractBase64(garmentDataUrl),
+        frame_width: FIT_STAGE_WIDTH,
+        frame_height: FIT_STAGE_HEIGHT,
+        garment_width: selectedGarment.dimensions.width,
+        garment_height: selectedGarment.dimensions.height,
+        manual_landmarks: overrideLandmarks
       });
 
-      try {
-        const modelDataUrl = await imageSourceToPngDataUrl(photoUrl);
-        const garmentDataUrl = await imageSourceToPngDataUrl(selectedGarment.overlayUrl);
+      setFitting(response.fitting);
+      setManualLandmarks(response.fitting.landmarks);
+      setResultImageUrl(response.result_image_base64 ? `data:image/png;base64,${response.result_image_base64}` : null);
 
-        const response = await requestTryOn({
-          clothing_id: selectedGarment.id,
-          model_image_base64: extractBase64(modelDataUrl),
-          garment_image_base64: extractBase64(garmentDataUrl),
-          frame_width: FIT_STAGE_WIDTH,
-          frame_height: FIT_STAGE_HEIGHT,
-          garment_width: selectedGarment.dimensions.width,
-          garment_height: selectedGarment.dimensions.height
-        });
-
-        if (cancelled) {
-          return;
-        }
-
-        setFitting(response.fitting);
-        setResultImageUrl(response.result_image_base64 ? `data:image/png;base64,${response.result_image_base64}` : null);
-
-        const warningText = response.warnings.length ? ` Warnings: ${response.warnings.join(' ')}` : '';
-        setStatus({
-          phase: response.status === 'ok' ? 'ready' : 'error',
-          message: `${response.pose_engine} + ${response.vton_engine} completed.${warningText}`,
-          lastUpdatedAt: new Date().toISOString()
-        });
-      } catch (caught) {
-        if (cancelled) {
-          return;
-        }
-
-        const message = caught instanceof Error ? caught.message : 'Try-on request failed.';
-        setFitting(null);
-        setResultImageUrl(null);
-        setStatus({
-          phase: 'error',
-          message,
-          lastUpdatedAt: new Date().toISOString()
-        });
-      }
-    };
-
-    void runTryOn();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [photoUrl, selectedGarment]);
+      const warningText = response.warnings.length ? ` Warnings: ${response.warnings.join(' ')}` : '';
+      setStatus({
+        phase: response.status === 'ok' ? 'ready' : 'error',
+        message: `${response.pose_engine} + ${response.vton_engine} completed.${warningText}`,
+        lastUpdatedAt: new Date().toISOString()
+      });
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : 'Try-on request failed.';
+      setFitting(null);
+      setResultImageUrl(null);
+      setStatus({
+        phase: 'error',
+        message,
+        lastUpdatedAt: new Date().toISOString()
+      });
+    }
+  };
 
   const handlePhotoChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -141,6 +139,8 @@ function App() {
     setPhotoName(file.name);
     setFitting(null);
     setResultImageUrl(null);
+    setManualMode(false);
+    setManualLandmarks(createDefaultLandmarks());
     setStatus({
       phase: 'processing',
       message: `${file.name} loaded. Preparing pose-guided try-on.`,
@@ -231,13 +231,55 @@ function App() {
     });
   };
 
+  const handleManualToggle = () => {
+    const nextManualMode = !manualMode;
+    setManualMode(nextManualMode);
+
+    if (nextManualMode) {
+      setResultImageUrl(null);
+      setManualLandmarks(fitting?.landmarks ?? manualLandmarks ?? createDefaultLandmarks());
+      setStatus({
+        phase: 'processing',
+        message: 'Manual fit point editing enabled. Drag neck, shoulders, and hips, then apply.',
+        lastUpdatedAt: new Date().toISOString()
+      });
+      return;
+    }
+
+    setStatus({
+      phase: photoUrl ? 'processing' : 'idle',
+      message: 'Manual fit point editing disabled.',
+      lastUpdatedAt: new Date().toISOString()
+    });
+  };
+
+  const handleApplyManualPoints = () => {
+    if (!manualLandmarks) {
+      setStatus({
+        phase: 'error',
+        message: 'No manual fit points are available yet.',
+        lastUpdatedAt: new Date().toISOString()
+      });
+      return;
+    }
+
+    void runTryOn(manualLandmarks);
+  };
+
+  const handleLandmarkChange = (key: keyof PoseLandmarks, point: PosePoint) => {
+    setManualLandmarks((current) => ({
+      ...(current ?? createDefaultLandmarks()),
+      [key]: point
+    }));
+  };
+
   return (
     <main className="app">
       <header className="app-header">
         <div>
           <p className="eyebrow">Pose + VTON Pipeline</p>
           <h1>Virtual Fitting Mirror</h1>
-          <p className="intro">Garments are processed into assets, then the backend runs pose estimation and VTON composition so the UI only needs to list garments and display try-on results.</p>
+          <p className="intro">If auto pose tracking cannot separate the model correctly, switch to manual fit points and drag the neck, shoulders, and hips before re-running the try-on.</p>
         </div>
         <div className="header-actions">
           <label className="secondary-upload-button">
@@ -269,11 +311,31 @@ function App() {
             <span className="photo-label">Model photo</span>
             <strong>{photoName}</strong>
           </div>
+          <div className="panel manual-controls">
+            <strong>Fit Points</strong>
+            <p>Use manual editing when the body cannot be tracked clearly from the uploaded photo.</p>
+            <div className="manual-action-row">
+              <button type="button" className="secondary-action-button" onClick={handleManualToggle} disabled={!photoUrl}>
+                {manualMode ? 'Exit Manual Edit' : 'Edit Fit Points'}
+              </button>
+              <button
+                type="button"
+                className="secondary-action-button"
+                onClick={handleApplyManualPoints}
+                disabled={!photoUrl || !manualMode || !manualLandmarks}
+              >
+                Apply Points
+              </button>
+            </div>
+          </div>
           <MirrorView
             photoUrl={photoUrl}
             garment={selectedGarment}
             fitting={fitting}
             resultImageUrl={resultImageUrl}
+            manualMode={manualMode}
+            manualLandmarks={manualLandmarks}
+            onLandmarkChange={handleLandmarkChange}
           />
           <CaptureButton onCapture={handleCapture} disabled={!resultImageUrl || status.phase === 'fitting'} />
         </div>
@@ -281,6 +343,16 @@ function App() {
       </div>
     </main>
   );
+}
+
+function createDefaultLandmarks(): PoseLandmarks {
+  return {
+    neck: { x: Math.round(FIT_STAGE_WIDTH * 0.5), y: Math.round(FIT_STAGE_HEIGHT * 0.18) },
+    left_shoulder: { x: Math.round(FIT_STAGE_WIDTH * 0.34), y: Math.round(FIT_STAGE_HEIGHT * 0.24) },
+    right_shoulder: { x: Math.round(FIT_STAGE_WIDTH * 0.66), y: Math.round(FIT_STAGE_HEIGHT * 0.24) },
+    left_hip: { x: Math.round(FIT_STAGE_WIDTH * 0.4), y: Math.round(FIT_STAGE_HEIGHT * 0.62) },
+    right_hip: { x: Math.round(FIT_STAGE_WIDTH * 0.6), y: Math.round(FIT_STAGE_HEIGHT * 0.62) }
+  };
 }
 
 function stripExtension(filename: string) {

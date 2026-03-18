@@ -42,6 +42,7 @@ export type TryOnRequest = {
   frame_height: number;
   garment_width: number;
   garment_height: number;
+  manual_landmarks?: PoseLandmarks;
 };
 
 export type TryOnResponse = {

@@ -65,6 +65,7 @@ class TryOnRequest(BaseModel):
     frame_height: int = Field(..., gt=0)
     garment_width: int = Field(..., gt=0)
     garment_height: int = Field(..., gt=0)
+    manual_landmarks: PoseLandmarks | None = None
 
 
 class TryOnResponse(BaseModel):
