@@ -45,6 +45,20 @@ export type TryOnRequest = {
   manual_landmarks?: PoseLandmarks;
 };
 
+export type ModelAnalyzeRequest = {
+  model_image_base64: string;
+  frame_width: number;
+  frame_height: number;
+};
+
+export type ModelAnalyzeResponse = {
+  status: string;
+  landmarks: PoseLandmarks;
+  pose_engine: string;
+  confidence: number;
+  warnings: string[];
+};
+
 export type TryOnResponse = {
   status: string;
   fitting: FittingResponse;

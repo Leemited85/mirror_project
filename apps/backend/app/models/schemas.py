@@ -68,6 +68,20 @@ class TryOnRequest(BaseModel):
     manual_landmarks: PoseLandmarks | None = None
 
 
+class ModelAnalyzeRequest(BaseModel):
+    model_image_base64: str = Field(..., description="Raw base64 payload, without data URI prefix")
+    frame_width: int = Field(..., gt=0)
+    frame_height: int = Field(..., gt=0)
+
+
+class ModelAnalyzeResponse(BaseModel):
+    status: str
+    landmarks: PoseLandmarks
+    pose_engine: str
+    confidence: float = Field(..., ge=0, le=1)
+    warnings: list[str] = Field(default_factory=list)
+
+
 class TryOnResponse(BaseModel):
     status: str
     fitting: FittingResponse
