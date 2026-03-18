@@ -1,6 +1,7 @@
 import type { GarmentAsset, ModelAsset, PoseLandmarks, TryOnJob } from '../types/fitting';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
+const API_ORIGIN = new URL(API_BASE_URL).origin;
 
 async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response;
@@ -15,7 +16,48 @@ async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
     throw new Error(`${path} returned ${response.status}`);
   }
 
-  return (await response.json()) as T;
+  return normalizeAssetUrls((await response.json()) as T);
+}
+
+function resolveAssetUrl(value: string | null | undefined) {
+  if (!value) {
+    return value ?? null;
+  }
+
+  if (value.startsWith('http://') || value.startsWith('https://') || value.startsWith('data:')) {
+    return value;
+  }
+
+  if (value.startsWith('/')) {
+    return `${API_ORIGIN}${value}`;
+  }
+
+  return value;
+}
+
+function normalizeAssetUrls<T>(payload: T): T {
+  if (!payload || typeof payload !== 'object') {
+    return payload;
+  }
+
+  if (Array.isArray(payload)) {
+    return payload.map((item) => normalizeAssetUrls(item)) as T;
+  }
+
+  const next = { ...(payload as Record<string, unknown>) };
+  for (const key of Object.keys(next)) {
+    const value = next[key];
+    if (typeof value === 'string' && key.endsWith('_url')) {
+      next[key] = resolveAssetUrl(value);
+      continue;
+    }
+
+    if (value && typeof value === 'object') {
+      next[key] = normalizeAssetUrls(value);
+    }
+  }
+
+  return next as T;
 }
 
 export function analyzeModel(payload: { name?: string; model_image_base64: string; frame_width: number; frame_height: number }) {
