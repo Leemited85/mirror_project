@@ -1,4 +1,5 @@
 import { useEffect, useState, type ChangeEvent } from 'react';
+import { CameraPreview } from './components/CameraPreview';
 import { CaptureButton } from './components/CaptureButton';
 import { ClothesPicker } from './components/ClothesPicker';
 import { MirrorView } from './components/MirrorView';
@@ -17,9 +18,10 @@ function App() {
   const [selectedGarmentId, setSelectedGarmentId] = useState<string | null>(null);
   const [tryOnJob, setTryOnJob] = useState<TryOnJob | null>(null);
   const [providerStatus, setProviderStatus] = useState<ProviderStatus | null>(null);
+  const [cameraConnected, setCameraConnected] = useState(false);
   const [status, setStatus] = useState<AppStatus>({
     phase: 'idle',
-    message: '모델 사진과 의류 사진을 올리면 AI 합성 결과를 생성합니다.'
+    message: '카메라 연결을 확인하고 있습니다.'
   });
 
   const selectedGarment = garments.find((garment) => garment.id === selectedGarmentId) ?? null;
@@ -225,7 +227,7 @@ function App() {
           <p className="eyebrow">AI 가상 피팅</p>
           <h1>모델 이미지 합성 스튜디오</h1>
           <p className="intro">
-            모델 사진과 의류 이미지를 업로드하면 백엔드에서 ComfyUI 또는 기본 합성 엔진으로 최종 결과 이미지를 생성합니다.
+            먼저 웹 카메라 연결 상태를 확인하고, 필요하면 모델 사진과 의류 이미지를 업로드해 합성 결과를 생성합니다.
           </p>
         </div>
         <div className="header-actions">
@@ -249,6 +251,23 @@ function App() {
         />
 
         <div className="center-column">
+          <CameraPreview
+            onStatusChange={(message, isConnected) => {
+              setCameraConnected(isConnected);
+              setStatus((current) => {
+                if (current.phase === 'processing' || current.phase === 'fitting') {
+                  return current;
+                }
+
+                return {
+                  phase: isConnected ? 'camera-ready' : 'idle',
+                  message,
+                  lastUpdatedAt: new Date().toISOString()
+                };
+              });
+            }}
+          />
+
           <section className="panel garment-summary">
             <span className="photo-label">현재 엔진</span>
             <strong>{providerStatus ? translateProvider(providerStatus.vton_provider) : '백엔드 연결 확인 중'}</strong>
@@ -257,6 +276,7 @@ function App() {
                 ? `포즈: ${translateProvider(providerStatus.pose_provider)} | 합성: ${translateProvider(providerStatus.vton_provider)}`
                 : '백엔드에서 provider 설정을 불러오면 현재 합성 엔진이 표시됩니다.'}
             </span>
+            <span className="garment-meta">카메라: {cameraConnected ? '연결됨' : '미연결'}</span>
             {providerStatus?.vton_provider === 'comfyui' ? (
               <span className="garment-meta">
                 {providerStatus.comfyui_base_url
