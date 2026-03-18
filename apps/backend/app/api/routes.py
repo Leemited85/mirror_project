@@ -60,7 +60,12 @@ def try_on_mock(
     vton_provider = create_vton_provider(settings)
 
     warnings: list[str] = []
-    landmarks, confidence = pose_provider.detect(model_bytes, request.frame_width, request.frame_height)
+    if request.manual_landmarks:
+        landmarks = request.manual_landmarks
+        confidence = 1.0
+        warnings.append("Manual fitting landmarks supplied by the frontend.")
+    else:
+        landmarks, confidence = pose_provider.detect(model_bytes, request.frame_width, request.frame_height)
     overlay = compute_overlay_from_landmarks(
         landmarks=landmarks,
         frame_height=request.frame_height,

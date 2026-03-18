@@ -146,6 +146,18 @@ input {
   gap: 0.22rem;
 }
 
+.manual-controls p {
+  margin: 0.3rem 0 0;
+  color: #6d6158;
+}
+
+.manual-action-row {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-top: 0.75rem;
+}
+
 .garment-summary p {
   margin: 0.25rem 0 0;
   color: #6d6158;
@@ -207,6 +219,29 @@ input {
   border-radius: 999px;
   background: #f97316;
   box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.18);
+  border: none;
+  padding: 0;
+}
+
+.landmark-dot.editable {
+  width: 16px;
+  height: 16px;
+  margin-left: -8px;
+  margin-top: -8px;
+  cursor: grab;
+}
+
+.landmark-label {
+  position: absolute;
+  top: -28px;
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  padding: 0.15rem 0.4rem;
+  border-radius: 999px;
+  background: rgba(34, 29, 24, 0.82);
+  color: #fff;
+  font-size: 0.68rem;
 }
 
 .fit-summary {
@@ -228,6 +263,7 @@ input {
 
 .upload-button,
 .secondary-upload-button,
+.secondary-action-button,
 .capture-button {
   display: inline-flex;
   justify-content: center;
@@ -253,6 +289,11 @@ input {
   overflow: hidden;
 }
 
+.secondary-action-button {
+  background: #efe5da;
+  color: #4c3426;
+}
+
 .upload-button input,
 .secondary-upload-button input {
   position: absolute;
@@ -268,6 +309,12 @@ input {
 
 .capture-button:disabled {
   background: #b8aba0;
+  cursor: not-allowed;
+}
+
+.secondary-action-button:disabled {
+  background: #e0d6cc;
+  color: #8f8377;
   cursor: not-allowed;
 }
 
