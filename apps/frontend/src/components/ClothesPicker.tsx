@@ -11,7 +11,7 @@ export function ClothesPicker({ garments, selectedGarmentId, onSelect, isLoading
   return (
     <aside className="panel sidebar">
       <h2>Clothes</h2>
-      <p className="hint">Select a garment product shot for the sample board.</p>
+      <p className="hint">Select a processed garment image or add a new garment from the header.</p>
       <div className="garment-list">
         {garments.map((garment) => {
           const selected = garment.id === selectedGarmentId;

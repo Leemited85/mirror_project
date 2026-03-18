@@ -17,7 +17,7 @@ export type FittingResponse = {
 };
 
 export type AppStatus = {
-  phase: 'idle' | 'camera-ready' | 'fitting' | 'ready' | 'error';
+  phase: 'idle' | 'camera-ready' | 'fitting' | 'processing' | 'ready' | 'error';
   message: string;
   lastUpdatedAt?: string;
 };

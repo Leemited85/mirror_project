@@ -4,15 +4,17 @@ import { ClothesPicker } from './components/ClothesPicker';
 import { MirrorView } from './components/MirrorView';
 import { StatusPanel } from './components/StatusPanel';
 import type { AppStatus, Garment } from './types/fitting';
+import { processGarmentImage } from './utils/garmentProcessing';
 
 type SampleGarment = Garment & {
   brand: string;
   color: string;
   silhouette: string;
   notes: string;
+  source: 'bundled' | 'uploaded';
 };
 
-const GARMENTS: SampleGarment[] = [
+const DEFAULT_GARMENTS: SampleGarment[] = [
   {
     id: 'hoodie-brown',
     name: 'Oversized Hoodie',
@@ -21,17 +23,19 @@ const GARMENTS: SampleGarment[] = [
     silhouette: 'Relaxed fit hoodie',
     notes: 'Real product-shot reference loaded from the provided AVIF asset.',
     thumbnailUrl: '/clothes/hoodie-brown.avif',
-    overlayUrl: '/clothes/hoodie-brown.avif'
+    overlayUrl: '/clothes/hoodie-brown.avif',
+    source: 'bundled'
   }
 ];
 
 function App() {
-  const [selectedGarmentId, setSelectedGarmentId] = useState<string>(GARMENTS[0].id);
+  const [garments, setGarments] = useState<SampleGarment[]>(DEFAULT_GARMENTS);
+  const [selectedGarmentId, setSelectedGarmentId] = useState<string>(DEFAULT_GARMENTS[0].id);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [photoName, setPhotoName] = useState<string>('No photo selected');
   const [status, setStatus] = useState<AppStatus>({
     phase: 'idle',
-    message: 'Upload a portrait photo to compare it with the real garment product shot.'
+    message: 'Upload a portrait photo or add a garment image to start building the sample board.'
   });
 
   useEffect(() => {
@@ -42,7 +46,7 @@ function App() {
     };
   }, [photoUrl]);
 
-  const selectedGarment = GARMENTS.find((garment) => garment.id === selectedGarmentId) ?? GARMENTS[0];
+  const selectedGarment = garments.find((garment) => garment.id === selectedGarmentId) ?? garments[0];
 
   const handlePhotoChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -62,6 +66,52 @@ function App() {
       message: `${file.name} loaded. You can now compare it against the garment product image.`,
       lastUpdatedAt: new Date().toISOString()
     });
+  };
+
+  const handleGarmentUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+
+    if (!file) {
+      return;
+    }
+
+    setStatus({
+      phase: 'processing',
+      message: `Processing ${file.name} and removing its background...`,
+      lastUpdatedAt: new Date().toISOString()
+    });
+
+    try {
+      const processed = await processGarmentImage(file);
+      const baseName = stripExtension(file.name);
+      const nextGarment: SampleGarment = {
+        id: `uploaded-${Date.now()}`,
+        name: toDisplayName(baseName),
+        brand: 'Uploaded Garment',
+        color: 'Auto',
+        silhouette: processed.height > processed.width ? 'Portrait product shot' : 'Wide product shot',
+        notes: 'Background removed in-browser from the uploaded garment photo.',
+        thumbnailUrl: processed.dataUrl,
+        overlayUrl: processed.dataUrl,
+        source: 'uploaded'
+      };
+
+      setGarments((current) => [nextGarment, ...current]);
+      setSelectedGarmentId(nextGarment.id);
+      setStatus({
+        phase: 'ready',
+        message: `${file.name} processed and added to the garment list.`,
+        lastUpdatedAt: new Date().toISOString()
+      });
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : 'Garment processing failed.';
+      setStatus({
+        phase: 'error',
+        message,
+        lastUpdatedAt: new Date().toISOString()
+      });
+    }
   };
 
   const handleSelectGarment = (garment: Garment) => {
@@ -168,25 +218,32 @@ function App() {
         <div>
           <p className="eyebrow">Product Shot Sample</p>
           <h1>Virtual Fitting Mirror</h1>
-          <p className="intro">Use a real garment product image for a cleaner web sample, then compare it side-by-side with the uploaded person photo.</p>
+          <p className="intro">Upload a garment photo, remove the background in-browser, and reuse the processed cutout directly inside the sample board.</p>
         </div>
-        <label className="upload-button">
-          <span>Upload Photo</span>
-          <input type="file" accept="image/*" onChange={handlePhotoChange} />
-        </label>
+        <div className="header-actions">
+          <label className="secondary-upload-button">
+            <span>Add Garment</span>
+            <input type="file" accept="image/*" onChange={handleGarmentUpload} />
+          </label>
+          <label className="upload-button">
+            <span>Upload Photo</span>
+            <input type="file" accept="image/*" onChange={handlePhotoChange} />
+          </label>
+        </div>
       </header>
       <div className="layout">
         <ClothesPicker
-          garments={GARMENTS}
+          garments={garments}
           selectedGarmentId={selectedGarmentId}
           onSelect={handleSelectGarment}
-          isLoading={false}
+          isLoading={status.phase === 'processing'}
         />
         <div className="center-column">
           <section className="panel garment-summary">
             <span className="photo-label">Selected garment</span>
             <strong>{selectedGarment.name}</strong>
             <span className="garment-meta">{selectedGarment.brand} | {selectedGarment.color}</span>
+            <span className="garment-badge">{selectedGarment.source === 'uploaded' ? 'Background removed' : 'Bundled sample'}</span>
             <p>{selectedGarment.notes}</p>
           </section>
           <div className="panel photo-meta">
@@ -194,12 +251,24 @@ function App() {
             <strong>{photoName}</strong>
           </div>
           <MirrorView photoUrl={photoUrl} garment={selectedGarment} />
-          <CaptureButton onCapture={handleCapture} disabled={!photoUrl} />
+          <CaptureButton onCapture={handleCapture} disabled={!photoUrl || status.phase === 'processing'} />
         </div>
         <StatusPanel status={status} />
       </div>
     </main>
   );
+}
+
+function stripExtension(filename: string) {
+  return filename.replace(/\.[^.]+$/, '');
+}
+
+function toDisplayName(value: string) {
+  return value
+    .replace(/[-_]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, (character) => character.toUpperCase());
 }
 
 function roundRect(
