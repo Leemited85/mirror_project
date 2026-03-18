@@ -24,3 +24,9 @@ app.mount(
     StaticFiles(directory=settings.clothes_dir),
     name="clothes-static",
 )
+
+app.mount(
+    settings.static_data_url_prefix,
+    StaticFiles(directory=settings.data_root),
+    name="data-static",
+)

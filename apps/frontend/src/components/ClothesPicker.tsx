@@ -1,24 +1,17 @@
-import type { Garment } from '../types/fitting';
-
-type ListGarment = Garment & {
-  brand: string;
-  color: string;
-  silhouette: string;
-  source: 'bundled' | 'uploaded';
-};
+import type { GarmentAsset } from '../types/fitting';
 
 type ClothesPickerProps = {
-  garments: ListGarment[];
+  garments: GarmentAsset[];
   selectedGarmentId: string | null;
-  onSelect: (garment: Garment) => void;
+  onSelect: (garment: GarmentAsset) => void;
   isLoading: boolean;
 };
 
 export function ClothesPicker({ garments, selectedGarmentId, onSelect, isLoading }: ClothesPickerProps) {
   return (
     <aside className="panel sidebar">
-      <h2>Garments</h2>
-      <p className="hint">Registered garments are processed in the background and listed here for fitting.</p>
+      <h2>Garment Library</h2>
+      <p className="hint">Processed garments are stored here and can be reused across different model analyses.</p>
       <div className="garment-list">
         {garments.map((garment) => {
           const selected = garment.id === selectedGarmentId;
@@ -30,9 +23,9 @@ export function ClothesPicker({ garments, selectedGarmentId, onSelect, isLoading
               disabled={isLoading}
             >
               <span className="garment-list-title">{garment.name}</span>
-              <span className="garment-list-meta">{garment.brand} | {garment.color}</span>
-              <span className="garment-list-meta">{garment.silhouette}</span>
-              <span className="garment-list-badge">{garment.source === 'uploaded' ? 'Processed' : 'Sample'}</span>
+              <span className="garment-list-meta">{garment.category}</span>
+              <span className="garment-list-meta">{garment.width} x {garment.height}</span>
+              <span className="garment-list-badge">Processed</span>
             </button>
           );
         })}

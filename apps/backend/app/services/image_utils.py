@@ -30,3 +30,7 @@ def encode_png_base64(image_bytes: bytes) -> str:
 
 def bytes_buffer(data: bytes) -> BytesIO:
     return BytesIO(data)
+
+
+def save_image_bytes(path, image_bytes: bytes) -> None:
+    path.write_bytes(image_bytes)

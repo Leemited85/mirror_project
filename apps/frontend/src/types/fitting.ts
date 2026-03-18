@@ -1,18 +1,3 @@
-export type Garment = {
-  id: string;
-  name: string;
-  thumbnailUrl: string;
-  overlayUrl: string;
-};
-
-export type OverlayBox = {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  rotation_deg: number;
-};
-
 export type PosePoint = {
   x: number;
   y: number;
@@ -26,6 +11,14 @@ export type PoseLandmarks = {
   right_hip: PosePoint;
 };
 
+export type OverlayBox = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  rotation_deg: number;
+};
+
 export type FittingResponse = {
   clothing_id: string;
   overlay: OverlayBox;
@@ -34,38 +27,41 @@ export type FittingResponse = {
   confidence: number;
 };
 
-export type TryOnRequest = {
-  clothing_id: string;
-  model_image_base64: string;
-  garment_image_base64: string;
+export type ModelAsset = {
+  id: string;
+  name: string;
+  original_image_url: string;
   frame_width: number;
   frame_height: number;
-  garment_width: number;
-  garment_height: number;
-  manual_landmarks?: PoseLandmarks;
-};
-
-export type ModelAnalyzeRequest = {
-  model_image_base64: string;
-  frame_width: number;
-  frame_height: number;
-};
-
-export type ModelAnalyzeResponse = {
-  status: string;
   landmarks: PoseLandmarks;
   pose_engine: string;
   confidence: number;
-  warnings: string[];
+  created_at: string;
 };
 
-export type TryOnResponse = {
-  status: string;
-  fitting: FittingResponse;
-  result_image_base64: string | null;
+export type GarmentAsset = {
+  id: string;
+  name: string;
+  category: 'top' | 'bottom' | 'dress';
+  original_image_url: string;
+  processed_image_url: string;
+  width: number;
+  height: number;
+  created_at: string;
+};
+
+export type TryOnJob = {
+  id: string;
+  model_id: string;
+  garment_id: string;
+  status: 'queued' | 'running' | 'succeeded' | 'failed';
+  fitting: FittingResponse | null;
+  result_image_url: string | null;
   pose_engine: string;
   vton_engine: string;
   warnings: string[];
+  created_at: string;
+  updated_at: string;
 };
 
 export type AppStatus = {
