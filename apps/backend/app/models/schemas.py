@@ -10,6 +10,13 @@ class HealthResponse(BaseModel):
     status: str = "ok"
 
 
+class ProviderStatusResponse(BaseModel):
+    pose_provider: str
+    vton_provider: str
+    comfyui_base_url: str | None = None
+    comfyui_workflow_path: str | None = None
+
+
 class PosePoint(BaseModel):
     x: int
     y: int

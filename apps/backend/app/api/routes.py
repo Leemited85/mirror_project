@@ -13,6 +13,7 @@ from app.models.schemas import (
     ModelAnalyzeRequest,
     ModelAsset,
     ModelListResponse,
+    ProviderStatusResponse,
     TryOnJob,
     TryOnJobRequest,
 )
@@ -42,6 +43,16 @@ router = APIRouter()
 @router.get("/health", response_model=HealthResponse)
 def health() -> HealthResponse:
     return HealthResponse()
+
+
+@router.get("/api/system/providers", response_model=ProviderStatusResponse)
+def provider_status(settings: Settings = Depends(get_settings)) -> ProviderStatusResponse:
+    return ProviderStatusResponse(
+        pose_provider=settings.pose_provider,
+        vton_provider=settings.vton_provider,
+        comfyui_base_url=settings.comfyui_base_url,
+        comfyui_workflow_path=str(settings.comfyui_workflow_path) if settings.comfyui_workflow_path else None,
+    )
 
 
 @router.post("/api/models/analyze", response_model=ModelAsset)
