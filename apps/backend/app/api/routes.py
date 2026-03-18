@@ -190,6 +190,7 @@ def create_try_on_job(
         ),
         pose_engine=pose_provider.name,
         vton_engine=vton_provider.name,
+        provider_job_id=getattr(vton_provider, "last_job_id", None),
         warnings=warnings,
         created_at=timestamp,
         updated_at=timestamp,

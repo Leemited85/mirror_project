@@ -23,6 +23,11 @@ class Settings:
     vton_provider: str
     mediapipe_model_asset_path: str | None
     catvton_endpoint: str | None
+    comfyui_base_url: str | None
+    comfyui_workflow_path: Path | None
+    comfyui_timeout_seconds: int
+    comfyui_poll_interval_ms: int
+    comfyui_output_node_id: str | None
 
 
 @lru_cache(maxsize=1)
@@ -34,6 +39,11 @@ def get_settings() -> Settings:
     models_dir = data_root / "models"
     garments_dir = data_root / "garments"
     tryon_dir = data_root / "tryon"
+    workflow_path_value = os.getenv("COMFYUI_WORKFLOW_PATH")
+    comfyui_workflow_path = None
+    if workflow_path_value:
+        candidate = Path(workflow_path_value)
+        comfyui_workflow_path = candidate if candidate.is_absolute() else project_root / candidate
 
     return Settings(
         app_name=os.getenv("APP_NAME", "Virtual Fitting Mirror Backend"),
@@ -51,6 +61,11 @@ def get_settings() -> Settings:
         vton_provider=os.getenv("VTON_PROVIDER", "mock"),
         mediapipe_model_asset_path=os.getenv("MEDIAPIPE_MODEL_ASSET_PATH"),
         catvton_endpoint=os.getenv("CATVTON_ENDPOINT"),
+        comfyui_base_url=os.getenv("COMFYUI_BASE_URL"),
+        comfyui_workflow_path=comfyui_workflow_path,
+        comfyui_timeout_seconds=int(os.getenv("COMFYUI_TIMEOUT_SECONDS", "180")),
+        comfyui_poll_interval_ms=int(os.getenv("COMFYUI_POLL_INTERVAL_MS", "1500")),
+        comfyui_output_node_id=os.getenv("COMFYUI_OUTPUT_NODE_ID"),
     )
 
 
