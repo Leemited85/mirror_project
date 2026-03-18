@@ -209,6 +209,15 @@ input {
   position: absolute;
   inset: 0;
   pointer-events: none;
+  z-index: 2;
+}
+
+.fit-landmarks.editable-layer {
+  pointer-events: auto;
+}
+
+.fit-stage.manual-editing {
+  cursor: crosshair;
 }
 
 .landmark-dot {
@@ -230,6 +239,7 @@ input {
   margin-left: -8px;
   margin-top: -8px;
   cursor: grab;
+  pointer-events: auto;
 }
 
 .landmark-label {
@@ -243,6 +253,11 @@ input {
   background: rgba(34, 29, 24, 0.82);
   color: #fff;
   font-size: 0.68rem;
+  pointer-events: none;
+}
+
+.landmark-dot.selected {
+  box-shadow: 0 0 0 5px rgba(249, 115, 22, 0.25);
 }
 
 .fit-summary {

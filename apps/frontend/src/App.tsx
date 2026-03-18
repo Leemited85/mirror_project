@@ -47,6 +47,7 @@ function App() {
   const [resultImageUrl, setResultImageUrl] = useState<string | null>(null);
   const [manualMode, setManualMode] = useState(false);
   const [manualLandmarks, setManualLandmarks] = useState<PoseLandmarks | null>(null);
+  const [selectedLandmarkKey, setSelectedLandmarkKey] = useState<keyof PoseLandmarks | null>(null);
   const [status, setStatus] = useState<AppStatus>({
     phase: 'idle',
     message: 'Upload a model photo and select a processed garment to run fitting.'
@@ -141,6 +142,7 @@ function App() {
     setResultImageUrl(null);
     setManualMode(false);
     setManualLandmarks(createDefaultLandmarks());
+    setSelectedLandmarkKey('neck');
     setStatus({
       phase: 'processing',
       message: `${file.name} loaded. Preparing pose-guided try-on.`,
@@ -238,6 +240,7 @@ function App() {
     if (nextManualMode) {
       setResultImageUrl(null);
       setManualLandmarks(fitting?.landmarks ?? manualLandmarks ?? createDefaultLandmarks());
+      setSelectedLandmarkKey('neck');
       setStatus({
         phase: 'processing',
         message: 'Manual fit point editing enabled. Drag neck, shoulders, and hips, then apply.',
@@ -251,6 +254,7 @@ function App() {
       message: 'Manual fit point editing disabled.',
       lastUpdatedAt: new Date().toISOString()
     });
+    setSelectedLandmarkKey(null);
   };
 
   const handleApplyManualPoints = () => {
@@ -271,6 +275,7 @@ function App() {
       ...(current ?? createDefaultLandmarks()),
       [key]: point
     }));
+    setSelectedLandmarkKey(key);
   };
 
   return (
@@ -335,7 +340,9 @@ function App() {
             resultImageUrl={resultImageUrl}
             manualMode={manualMode}
             manualLandmarks={manualLandmarks}
+            selectedLandmarkKey={selectedLandmarkKey}
             onLandmarkChange={handleLandmarkChange}
+            onLandmarkSelect={setSelectedLandmarkKey}
           />
           <CaptureButton onCapture={handleCapture} disabled={!resultImageUrl || status.phase === 'fitting'} />
         </div>
