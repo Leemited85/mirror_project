@@ -2,6 +2,9 @@
 
 Use an API-format workflow JSON exported from ComfyUI for `COMFYUI_WORKFLOW_PATH`.
 
+A starter scaffold is included at `apps/backend/workflows/comfyui_vton_api.template.json`.
+It is not runnable as-is. You must replace `REPLACE_WITH_VTON_NODE_CLASS` and remap the node input names to match the custom VTON node you installed in ComfyUI.
+
 The backend uploads:
 
 - the analyzed model image
@@ -39,7 +42,8 @@ Practical recommendation:
 
 1. Build and test the VTON workflow directly in ComfyUI first.
 2. Export the API JSON.
-3. Replace hard-coded file names or scalar values with the placeholders above.
-4. Point `COMFYUI_WORKFLOW_PATH` at that JSON file.
+3. If you want a quick starting point, copy `comfyui_vton_api.template.json` and edit the VTON node id and input names.
+4. Replace hard-coded file names or scalar values with the placeholders above.
+5. Point `COMFYUI_WORKFLOW_PATH` at that JSON file.
 
 If your workflow has multiple output images, set `COMFYUI_OUTPUT_NODE_ID` to the node id of the final `SaveImage` output.

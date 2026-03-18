@@ -1,0 +1,56 @@
+{
+  "1": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "{{MODEL_IMAGE}}",
+      "upload": "image"
+    }
+  },
+  "2": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "{{GARMENT_IMAGE}}",
+      "upload": "image"
+    }
+  },
+  "10": {
+    "class_type": "REPLACE_WITH_VTON_NODE_CLASS",
+    "inputs": {
+      "person_image": [
+        "1",
+        0
+      ],
+      "garment_image": [
+        "2",
+        0
+      ],
+      "frame_width": "{{FRAME_WIDTH}}",
+      "frame_height": "{{FRAME_HEIGHT}}",
+      "overlay_x": "{{OVERLAY_X}}",
+      "overlay_y": "{{OVERLAY_Y}}",
+      "overlay_width": "{{OVERLAY_WIDTH}}",
+      "overlay_height": "{{OVERLAY_HEIGHT}}",
+      "overlay_rotation_deg": "{{OVERLAY_ROTATION_DEG}}",
+      "neck_x": "{{LANDMARK_NECK_X}}",
+      "neck_y": "{{LANDMARK_NECK_Y}}",
+      "left_shoulder_x": "{{LANDMARK_LEFT_SHOULDER_X}}",
+      "left_shoulder_y": "{{LANDMARK_LEFT_SHOULDER_Y}}",
+      "right_shoulder_x": "{{LANDMARK_RIGHT_SHOULDER_X}}",
+      "right_shoulder_y": "{{LANDMARK_RIGHT_SHOULDER_Y}}",
+      "left_hip_x": "{{LANDMARK_LEFT_HIP_X}}",
+      "left_hip_y": "{{LANDMARK_LEFT_HIP_Y}}",
+      "right_hip_x": "{{LANDMARK_RIGHT_HIP_X}}",
+      "right_hip_y": "{{LANDMARK_RIGHT_HIP_Y}}"
+    }
+  },
+  "20": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "filename_prefix": "tryon_result",
+      "images": [
+        "10",
+        0
+      ]
+    }
+  }
+}
