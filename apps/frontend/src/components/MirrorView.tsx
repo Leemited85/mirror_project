@@ -5,6 +5,7 @@ type MirrorViewProps = {
   model: ModelAsset | null;
   garment: GarmentAsset | null;
   job: TryOnJob | null;
+  modelPreviewUrl: string | null;
   manualMode: boolean;
   manualLandmarks: PoseLandmarks | null;
   selectedLandmarkKey: keyof PoseLandmarks | null;
@@ -16,13 +17,16 @@ export function MirrorView({
   model,
   garment,
   job,
+  modelPreviewUrl,
   manualMode,
   manualLandmarks,
   selectedLandmarkKey,
   onLandmarkChange,
   onLandmarkSelect
 }: MirrorViewProps) {
-  const stageImageUrl = job?.result_image_url ?? model?.original_image_url ?? null;
+  const stageImageUrl = manualMode
+    ? modelPreviewUrl ?? model?.original_image_url ?? null
+    : job?.result_image_url ?? modelPreviewUrl ?? model?.original_image_url ?? null;
   const displayLandmarks = manualMode ? manualLandmarks : job?.fitting?.landmarks ?? model?.landmarks ?? null;
 
   const handleStageClick = (event: ReactMouseEvent<HTMLDivElement>) => {
@@ -41,10 +45,10 @@ export function MirrorView({
     <section className="mirror panel">
       <div className={`fit-stage ${manualMode ? 'manual-editing' : ''}`} onClick={handleStageClick}>
         {stageImageUrl ? (
-          <img src={stageImageUrl} alt="Try-on workspace" className="fit-model-image" />
+          <img src={stageImageUrl} alt="가상 피팅 작업 화면" className="fit-model-image" />
         ) : (
           <div className="empty-state">
-            <p>Upload a model first, then select a processed garment to preview the try-on result.</p>
+            <p>먼저 모델 이미지를 업로드한 뒤 처리된 의류를 선택하면 피팅 결과를 미리볼 수 있습니다.</p>
           </div>
         )}
 
@@ -69,23 +73,35 @@ export function MirrorView({
                   onLandmarkSelect(key);
                 }}
               >
-                <span className="landmark-label">{key.replace(/_/g, ' ')}</span>
+                <span className="landmark-label">{translateLandmarkLabel(key)}</span>
               </button>
             ))}
           </div>
         ) : null}
       </div>
       <div className="fit-summary">
-        <strong>{model ? `Model: ${model.name}` : 'Model not analyzed'}</strong>
-        <span>{garment ? `Garment: ${garment.name}` : 'Select a processed garment'}</span>
+        <strong>{model ? `모델: ${model.name}` : '모델 분석 대기 중'}</strong>
+        <span>{garment ? `의류: ${garment.name}` : '처리된 의류를 선택해 주세요'}</span>
         <span>
           {job
             ? `${job.pose_engine} + ${job.vton_engine} | ${job.status}`
             : manualMode
-              ? 'Edit landmarks and apply them to the next preview'
-              : 'Preview will run after model analysis and garment selection'}
+              ? '피팅 포인트를 수정한 뒤 다음 미리보기에 적용하세요'
+              : '모델 분석과 의류 선택이 완료되면 미리보기가 실행됩니다'}
         </span>
       </div>
     </section>
   );
+}
+
+function translateLandmarkLabel(key: keyof PoseLandmarks) {
+  const labels: Record<keyof PoseLandmarks, string> = {
+    neck: '목',
+    left_shoulder: '왼쪽 어깨',
+    right_shoulder: '오른쪽 어깨',
+    left_hip: '왼쪽 골반',
+    right_hip: '오른쪽 골반'
+  };
+
+  return labels[key];
 }

@@ -4,7 +4,7 @@ type CaptureButtonProps = {
   label?: string;
 };
 
-export function CaptureButton({ onCapture, disabled, label = 'Save Fit' }: CaptureButtonProps) {
+export function CaptureButton({ onCapture, disabled, label = '결과 이미지 저장' }: CaptureButtonProps) {
   return (
     <button className="capture-button" onClick={onCapture} disabled={disabled}>
       {label}
