@@ -11,6 +11,7 @@ function App() {
   const [selectedGarmentId, setSelectedGarmentId] = useState<string | null>(null);
   const [providerStatus, setProviderStatus] = useState<ProviderStatus | null>(null);
   const [cameraConnected, setCameraConnected] = useState(false);
+  const [trackingEnabled, setTrackingEnabled] = useState(false);
   const [status, setStatus] = useState<AppStatus>({
     phase: 'idle',
     message: '카메라 연결을 확인하고 있습니다.'
@@ -101,9 +102,9 @@ function App() {
       <header className="app-header">
         <div>
           <p className="eyebrow">AI 가상 피팅</p>
-          <h1>카메라 연결 미리보기</h1>
+          <h1>카메라 신체 트래킹 미리보기</h1>
           <p className="intro">
-            웹 카메라 연결 상태를 먼저 확인하고, 의류 라이브러리만 유지한 상태로 다음 단계를 준비합니다.
+            웹 카메라에 연결한 뒤 OpenCV 기반 추정 포인트를 실시간으로 그립니다. 의류 라이브러리는 그대로 유지됩니다.
           </p>
         </div>
         <div className="header-actions">
@@ -138,17 +139,32 @@ function App() {
                 };
               });
             }}
+            onTrackingChange={(message, isTracking) => {
+              setTrackingEnabled(isTracking);
+              setStatus((current) => {
+                if (current.phase === 'processing') {
+                  return current;
+                }
+
+                return {
+                  phase: isTracking ? 'ready' : current.phase,
+                  message,
+                  lastUpdatedAt: new Date().toISOString()
+                };
+              });
+            }}
           />
 
           <section className="panel garment-summary">
-            <span className="photo-label">현재 엔진</span>
-            <strong>{providerStatus ? translateProvider(providerStatus.vton_provider) : '백엔드 연결 확인 중'}</strong>
+            <span className="photo-label">현재 상태</span>
+            <strong>{cameraConnected ? '카메라 연결 완료' : '카메라 연결 확인 중'}</strong>
+            <span className="garment-meta">카메라: {cameraConnected ? '연결됨' : '미연결'}</span>
+            <span className="garment-meta">OpenCV 트래킹: {trackingEnabled ? '동작 중' : '준비 중'}</span>
             <span className="garment-meta">
               {providerStatus
-                ? `포즈: ${translateProvider(providerStatus.pose_provider)} | 합성: ${translateProvider(providerStatus.vton_provider)}`
-                : '백엔드에서 provider 설정을 불러오면 현재 엔진 정보가 표시됩니다.'}
+                ? `백엔드 엔진: ${translateProvider(providerStatus.vton_provider)}`
+                : '백엔드 엔진 정보는 연결 후 표시됩니다.'}
             </span>
-            <span className="garment-meta">카메라: {cameraConnected ? '연결됨' : '미연결'}</span>
             {selectedGarment ? (
               <span className="garment-meta">
                 선택된 의류: {selectedGarment.name} ({translateCategory(selectedGarment.category)})
