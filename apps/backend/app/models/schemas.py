@@ -20,22 +20,6 @@ class ClothesResponse(BaseModel):
     items: List[ClothesItem]
 
 
-class FittingRequest(BaseModel):
-    clothing_id: str = Field(..., description="Garment ID from /api/clothes or frontend upload list")
-    frame_width: int = Field(..., gt=0)
-    frame_height: int = Field(..., gt=0)
-    garment_width: int = Field(..., gt=0)
-    garment_height: int = Field(..., gt=0)
-
-
-class OverlayBox(BaseModel):
-    x: int
-    y: int
-    width: int
-    height: int
-    rotation_deg: float = 0
-
-
 class PosePoint(BaseModel):
     x: int
     y: int
@@ -49,12 +33,47 @@ class PoseLandmarks(BaseModel):
     right_hip: PosePoint
 
 
+class OverlayBox(BaseModel):
+    x: int
+    y: int
+    width: int
+    height: int
+    rotation_deg: float = 0
+
+
+class FittingRequest(BaseModel):
+    clothing_id: str = Field(..., description="Garment ID from the frontend garment list")
+    frame_width: int = Field(..., gt=0)
+    frame_height: int = Field(..., gt=0)
+    garment_width: int = Field(..., gt=0)
+    garment_height: int = Field(..., gt=0)
+
+
 class FittingResponse(BaseModel):
     clothing_id: str
     overlay: OverlayBox
     landmarks: PoseLandmarks
     engine: str
     confidence: float = Field(..., ge=0, le=1)
+
+
+class TryOnRequest(BaseModel):
+    clothing_id: str
+    model_image_base64: str = Field(..., description="Raw base64 payload, without data URI prefix")
+    garment_image_base64: str = Field(..., description="Raw base64 payload, without data URI prefix")
+    frame_width: int = Field(..., gt=0)
+    frame_height: int = Field(..., gt=0)
+    garment_width: int = Field(..., gt=0)
+    garment_height: int = Field(..., gt=0)
+
+
+class TryOnResponse(BaseModel):
+    status: str
+    fitting: FittingResponse
+    result_image_base64: str | None = None
+    pose_engine: str
+    vton_engine: str
+    warnings: list[str] = Field(default_factory=list)
 
 
 class CaptureRequest(BaseModel):

@@ -14,6 +14,10 @@ class Settings:
     clothes_dir: Path
     captures_dir: Path
     static_clothes_url_prefix: str
+    pose_provider: str
+    vton_provider: str
+    mediapipe_model_asset_path: str | None
+    catvton_endpoint: str | None
 
 
 @lru_cache(maxsize=1)
@@ -29,4 +33,8 @@ def get_settings() -> Settings:
         clothes_dir=clothes_dir,
         captures_dir=captures_dir,
         static_clothes_url_prefix=os.getenv("STATIC_CLOTHES_URL_PREFIX", "/static/clothes"),
+        pose_provider=os.getenv("POSE_PROVIDER", "mock"),
+        vton_provider=os.getenv("VTON_PROVIDER", "mock"),
+        mediapipe_model_asset_path=os.getenv("MEDIAPIPE_MODEL_ASSET_PATH"),
+        catvton_endpoint=os.getenv("CATVTON_ENDPOINT"),
     )

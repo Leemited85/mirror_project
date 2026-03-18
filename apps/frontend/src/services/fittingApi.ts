@@ -1,9 +1,9 @@
-import type { FittingRequest, FittingResponse } from '../types/fitting';
+import type { TryOnRequest, TryOnResponse } from '../types/fitting';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
 
-export async function requestMockFitting(payload: FittingRequest): Promise<FittingResponse> {
-  const response = await fetch(`${API_BASE_URL}/api/fitting/mock`, {
+export async function requestTryOn(payload: TryOnRequest): Promise<TryOnResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/try-on/mock`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json'
@@ -12,8 +12,8 @@ export async function requestMockFitting(payload: FittingRequest): Promise<Fitti
   });
 
   if (!response.ok) {
-    throw new Error(`Mock fitting API returned ${response.status}`);
+    throw new Error(`Try-on API returned ${response.status}`);
   }
 
-  return (await response.json()) as FittingResponse;
+  return (await response.json()) as TryOnResponse;
 }

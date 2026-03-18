@@ -10,37 +10,17 @@ type MirrorViewProps = {
   photoUrl: string | null;
   garment: MirrorGarment;
   fitting: FittingResponse | null;
+  resultImageUrl: string | null;
 };
 
-export function MirrorView({ photoUrl, garment, fitting }: MirrorViewProps) {
+export function MirrorView({ photoUrl, garment, fitting, resultImageUrl }: MirrorViewProps) {
   return (
     <section className="mirror panel">
       <div className="fit-stage">
-        {photoUrl ? (
-          <>
-            <img src={photoUrl} alt="Uploaded model" className="fit-model-image" />
-            {fitting ? (
-              <>
-                <img
-                  src={garment.overlayUrl}
-                  alt={garment.name}
-                  className="fit-overlay-image"
-                  style={{
-                    left: `${fitting.overlay.x}px`,
-                    top: `${fitting.overlay.y}px`,
-                    width: `${fitting.overlay.width}px`,
-                    height: `${fitting.overlay.height}px`,
-                    transform: `rotate(${fitting.overlay.rotation_deg}deg)`
-                  }}
-                />
-                <div className="fit-landmarks">
-                  {Object.entries(fitting.landmarks).map(([key, point]) => (
-                    <span key={key} className="landmark-dot" style={{ left: `${point.x}px`, top: `${point.y}px` }} />
-                  ))}
-                </div>
-              </>
-            ) : null}
-          </>
+        {resultImageUrl ? (
+          <img src={resultImageUrl} alt="Try-on result" className="fit-model-image" />
+        ) : photoUrl ? (
+          <img src={photoUrl} alt="Uploaded model" className="fit-model-image" />
         ) : (
           <div className="empty-state">
             <p>Upload a model photo to run body-tracked garment fitting.</p>
