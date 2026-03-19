@@ -189,12 +189,13 @@ input {
 .camera-stage {
   position: relative;
   width: 100%;
-  aspect-ratio: 16 / 9;
+  aspect-ratio: 3 / 4;
   background:
     linear-gradient(180deg, rgba(252, 248, 242, 0.72), rgba(239, 231, 222, 0.92));
   border: 1px solid #eadfd1;
   border-radius: 18px;
   overflow: hidden;
+  max-height: 80vh;
 }
 
 .camera-video {
