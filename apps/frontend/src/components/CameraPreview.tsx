@@ -11,8 +11,16 @@ type TrackingPoint = {
   y: number;
 };
 
+type TrackingRect = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
 const OPENCV_SCRIPT_ID = 'opencv-js-runtime';
 const OPENCV_SCRIPT_URL = 'https://docs.opencv.org/4.x/opencv.js';
+const TRACKING_AREA_THRESHOLD = 2500;
 
 export function CameraPreview({ onStatusChange, onTrackingChange }: CameraPreviewProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -21,6 +29,7 @@ export function CameraPreview({ onStatusChange, onTrackingChange }: CameraPrevie
   const streamRef = useRef<MediaStream | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   const previousFrameRef = useRef<any>(null);
+  const lastTrackedRectRef = useRef<TrackingRect | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isConnected, setIsConnected] = useState(false);
   const [trackingReady, setTrackingReady] = useState(false);
@@ -30,15 +39,21 @@ export function CameraPreview({ onStatusChange, onTrackingChange }: CameraPrevie
     let cancelled = false;
 
     async function setup() {
-      await connectCamera();
-      if (cancelled) {
-        return;
+      try {
+        await connectCamera();
+        if (cancelled) {
+          return;
+        }
+
+        await ensureOpenCvLoaded();
+        if (cancelled) {
+          return;
+        }
+
+        startTrackingLoop();
+      } catch {
+        // 카메라 또는 OpenCV 초기화 실패는 상태 메시지에서 안내한다.
       }
-      await ensureOpenCvLoaded();
-      if (cancelled) {
-        return;
-      }
-      startTrackingLoop();
     }
 
     void setup();
@@ -61,7 +76,7 @@ export function CameraPreview({ onStatusChange, onTrackingChange }: CameraPrevie
       setIsLoading(false);
       setMessage(nextMessage);
       onStatusChange?.(nextMessage, false);
-      return;
+      throw new Error(nextMessage);
     }
 
     try {
@@ -90,6 +105,7 @@ export function CameraPreview({ onStatusChange, onTrackingChange }: CameraPrevie
       setIsLoading(false);
       setMessage(nextMessage);
       onStatusChange?.(nextMessage, false);
+      throw caught;
     }
   }
 
@@ -101,13 +117,12 @@ export function CameraPreview({ onStatusChange, onTrackingChange }: CameraPrevie
       return;
     }
 
-    try {
-      await new Promise<void>((resolve, reject) => {
-        const existing = document.getElementById(OPENCV_SCRIPT_ID) as HTMLScriptElement | null;
-        if (existing) {
-          existing.addEventListener('load', () => resolve(), { once: true });
-          existing.addEventListener('error', () => reject(new Error('OpenCV 스크립트를 불러오지 못했습니다.')), { once: true });
-          return;
+    await new Promise<void>((resolve, reject) => {
+      const existing = document.getElementById(OPENCV_SCRIPT_ID) as HTMLScriptElement | null;
+      if (existing) {
+        existing.addEventListener('load', () => resolve(), { once: true });
+        existing.addEventListener('error', () => reject(new Error('OpenCV 스크립트를 불러오지 못했습니다.')), { once: true });
+        return;
       }
 
       const script = document.createElement('script');
@@ -116,29 +131,23 @@ export function CameraPreview({ onStatusChange, onTrackingChange }: CameraPrevie
       script.src = OPENCV_SCRIPT_URL;
       script.onload = () => resolve();
       script.onerror = () => reject(new Error('OpenCV 스크립트를 불러오지 못했습니다.'));
-        document.head.appendChild(script);
-      });
+      document.head.appendChild(script);
+    });
 
-      const waitUntilReady = async () => {
-        const startedAt = Date.now();
-        while (!window.cv?.Mat) {
-          if (Date.now() - startedAt > 15000) {
-            throw new Error('OpenCV 초기화 시간이 초과되었습니다.');
-          }
-          await new Promise((resolve) => setTimeout(resolve, 100));
-        }
-      };
-
-      await waitUntilReady();
-      const nextMessage = 'OpenCV가 준비되었습니다. 실시간 추적을 시작합니다.';
-      setTrackingReady(true);
-      onTrackingChange?.(nextMessage, true);
-    } catch (error) {
-      const nextMessage = error instanceof Error ? error.message : 'OpenCV 로드에 실패했습니다.';
-      setTrackingReady(false);
-      onTrackingChange?.(nextMessage, false);
-      throw error;
+    const startedAt = Date.now();
+    while (!window.cv?.Mat) {
+      if (Date.now() - startedAt > 15000) {
+        const nextMessage = 'OpenCV 초기화 시간이 초과되었습니다.';
+        setTrackingReady(false);
+        onTrackingChange?.(nextMessage, false);
+        throw new Error(nextMessage);
+      }
+      await new Promise((resolve) => setTimeout(resolve, 100));
     }
+
+    const nextMessage = 'OpenCV가 준비되었습니다. 실시간 추적을 시작합니다.';
+    setTrackingReady(true);
+    onTrackingChange?.(nextMessage, true);
   }
 
   function startTrackingLoop() {
@@ -198,6 +207,9 @@ export function CameraPreview({ onStatusChange, onTrackingChange }: CameraPrevie
 
     if (!previousFrameRef.current) {
       previousFrameRef.current = gray.clone();
+      const initialRect = buildFallbackRect(video.videoWidth, video.videoHeight);
+      lastTrackedRectRef.current = initialRect;
+      drawTrackedBody(overlayContext, initialRect, true);
       source.delete();
       gray.delete();
       return;
@@ -210,28 +222,30 @@ export function CameraPreview({ onStatusChange, onTrackingChange }: CameraPrevie
     const kernel = cv.Mat.ones(5, 5, cv.CV_8U);
 
     cv.absdiff(gray, previousFrameRef.current, diff);
-    cv.threshold(diff, threshold, 25, 255, cv.THRESH_BINARY);
+    cv.threshold(diff, threshold, 18, 255, cv.THRESH_BINARY);
     cv.dilate(threshold, threshold, kernel);
     cv.findContours(threshold, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
 
-    let biggestRect: { x: number; y: number; width: number; height: number } | null = null;
+    let biggestRect: TrackingRect | null = null;
     let biggestArea = 0;
 
     for (let index = 0; index < contours.size(); index += 1) {
       const contour = contours.get(index);
       const area = cv.contourArea(contour);
-      if (area > 9000 && area > biggestArea) {
-        const rect = cv.boundingRect(contour);
-        biggestRect = rect;
+      if (area > TRACKING_AREA_THRESHOLD && area > biggestArea) {
+        biggestRect = cv.boundingRect(contour);
         biggestArea = area;
       }
       contour.delete();
     }
 
-    if (biggestRect) {
-      drawTrackedBody(overlayContext, biggestRect);
-      onTrackingChange?.('OpenCV 기반 신체 포인트를 추적 중입니다.', true);
-    }
+    const resolvedRect = biggestRect ?? lastTrackedRectRef.current ?? buildFallbackRect(video.videoWidth, video.videoHeight);
+    lastTrackedRectRef.current = resolvedRect;
+    drawTrackedBody(overlayContext, resolvedRect, !biggestRect);
+    onTrackingChange?.(
+      biggestRect ? 'OpenCV 기반 포인트를 추적 중입니다.' : '움직임이 적어 기본 추정 포인트를 표시 중입니다.',
+      true
+    );
 
     previousFrameRef.current.delete();
     previousFrameRef.current = gray.clone();
@@ -290,7 +304,7 @@ export function CameraPreview({ onStatusChange, onTrackingChange }: CameraPrevie
 
       <div className="camera-summary">
         <span>카메라: {isConnected ? '연결됨' : isLoading ? '확인 중' : '연결 실패'}</span>
-        <span>트래킹: {trackingReady ? '활성화됨' : '준비 중'}</span>
+        <span>트래킹: {trackingReady ? '포인트 표시 중' : '준비 중'}</span>
         <button type="button" className="secondary-action-button" onClick={() => void connectCamera()}>
           카메라 다시 연결
         </button>
@@ -299,7 +313,16 @@ export function CameraPreview({ onStatusChange, onTrackingChange }: CameraPrevie
   );
 }
 
-function drawTrackedBody(context: CanvasRenderingContext2D, rect: { x: number; y: number; width: number; height: number }) {
+function buildFallbackRect(width: number, height: number): TrackingRect {
+  return {
+    x: Math.round(width * 0.24),
+    y: Math.round(height * 0.12),
+    width: Math.round(width * 0.52),
+    height: Math.round(height * 0.72)
+  };
+}
+
+function drawTrackedBody(context: CanvasRenderingContext2D, rect: TrackingRect, isFallback: boolean) {
   const points: TrackingPoint[] = [
     { key: 'head', x: rect.x + rect.width * 0.5, y: rect.y + rect.height * 0.12 },
     { key: 'neck', x: rect.x + rect.width * 0.5, y: rect.y + rect.height * 0.22 },
@@ -309,12 +332,18 @@ function drawTrackedBody(context: CanvasRenderingContext2D, rect: { x: number; y
     { key: 'right_hip', x: rect.x + rect.width * 0.62, y: rect.y + rect.height * 0.72 }
   ];
 
-  context.strokeStyle = 'rgba(56, 189, 248, 0.95)';
-  context.lineWidth = 3;
+  context.strokeStyle = isFallback ? 'rgba(245, 158, 11, 0.95)' : 'rgba(56, 189, 248, 0.95)';
   context.fillStyle = 'rgba(249, 115, 22, 0.95)';
+  context.lineWidth = 3;
   context.font = '12px Segoe UI';
 
   context.strokeRect(rect.x, rect.y, rect.width, rect.height);
+  context.fillStyle = 'rgba(34, 29, 24, 0.82)';
+  context.fillRect(rect.x, Math.max(0, rect.y - 24), 170, 20);
+  context.fillStyle = '#ffffff';
+  context.fillText(isFallback ? 'tracking: fallback guide' : 'tracking: active contour', rect.x + 8, Math.max(14, rect.y - 10));
+
+  context.strokeStyle = isFallback ? 'rgba(245, 158, 11, 0.95)' : 'rgba(56, 189, 248, 0.95)';
   drawLine(context, points[1], points[2]);
   drawLine(context, points[1], points[3]);
   drawLine(context, points[2], points[4]);
@@ -322,9 +351,11 @@ function drawTrackedBody(context: CanvasRenderingContext2D, rect: { x: number; y
   drawLine(context, points[4], points[5]);
 
   for (const point of points) {
+    context.fillStyle = 'rgba(249, 115, 22, 0.95)';
     context.beginPath();
     context.arc(point.x, point.y, 6, 0, Math.PI * 2);
     context.fill();
+    context.fillStyle = '#ffffff';
     context.fillText(point.key, point.x + 10, point.y - 8);
   }
 }
