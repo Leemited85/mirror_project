@@ -9,6 +9,10 @@ export type PoseLandmarks = {
   right_shoulder: PosePoint;
   left_hip: PosePoint;
   right_hip: PosePoint;
+  left_elbow?: PosePoint | null;
+  right_elbow?: PosePoint | null;
+  left_wrist?: PosePoint | null;
+  right_wrist?: PosePoint | null;
 };
 
 export type OverlayBox = {
@@ -17,6 +21,37 @@ export type OverlayBox = {
   width: number;
   height: number;
   rotation_deg: number;
+};
+
+export type NormalizedPoint = {
+  x: number;
+  y: number;
+};
+
+export type NormalizedRect = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+export type GarmentPart = {
+  id: string;
+  role: 'torso' | 'left_sleeve' | 'right_sleeve' | 'hood';
+  source_rect: NormalizedRect;
+  pivot: NormalizedPoint;
+  depth: number;
+  anchor_start?: string | null;
+  anchor_end?: string | null;
+  scale_multiplier: number;
+  rotation_offset_deg: number;
+};
+
+export type GarmentRig = {
+  version: string;
+  render_mode: 'segmented-2d';
+  anchors: Record<string, NormalizedPoint>;
+  parts: GarmentPart[];
 };
 
 export type FittingResponse = {
@@ -47,6 +82,7 @@ export type GarmentAsset = {
   processed_image_url: string;
   width: number;
   height: number;
+  rig?: GarmentRig | null;
   created_at: string;
 };
 

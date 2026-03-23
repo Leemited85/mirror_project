@@ -33,6 +33,7 @@ from app.services.asset_store import (
 from app.services.capture_service import save_capture
 from app.services.fitting.geometry import compute_overlay_from_landmarks
 from app.services.garment_processing import remove_background
+from app.services.garment_rig import build_default_garment_rig
 from app.services.image_utils import decode_base64_image, save_image_bytes
 from app.services.pose import create_pose_provider
 from app.services.vton import create_vton_provider
@@ -114,6 +115,7 @@ def process_garment(
         processed_image_url=f"{settings.static_data_url_prefix}/garments/{asset_id}/processed.png",
         width=width,
         height=height,
+        rig=build_default_garment_rig(request.name or asset_id, request.category),
         created_at=created_at,
     )
     save_garment_asset(asset_dir, asset)
