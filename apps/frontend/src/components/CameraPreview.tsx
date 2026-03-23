@@ -8,10 +8,12 @@ import {
 import type { GarmentAsset, OverlayBox, PoseLandmarks, PosePoint } from '../types/fitting';
 import { computeOverlayFromLandmarks, smoothOverlay } from '../utils/fittingGeometry';
 import { drawGarmentRig } from '../utils/garmentRigRenderer';
+import { ThreeDGarmentOverlay } from './ThreeDGarmentOverlay';
 
 type CameraPreviewProps = {
   garment: GarmentAsset | null;
   enableLiveOverlay?: boolean;
+  showThreeDSample?: boolean;
   showTrackingGuide?: boolean;
   onStatusChange?: (message: string, isConnected: boolean) => void;
   onTrackingChange?: (message: string, isTracking: boolean) => void;
@@ -62,7 +64,7 @@ const LANDMARK_SMOOTHING_ALPHA = 0.2;
 const FALLBACK_LOSS_FRAMES = 24;
 
 export const CameraPreview = forwardRef<CameraPreviewHandle, CameraPreviewProps>(function CameraPreview(
-  { garment, enableLiveOverlay = true, showTrackingGuide = true, onStatusChange, onTrackingChange },
+  { garment, enableLiveOverlay = true, showThreeDSample = true, showTrackingGuide = true, onStatusChange, onTrackingChange },
   ref
 ) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -82,6 +84,8 @@ export const CameraPreview = forwardRef<CameraPreviewHandle, CameraPreviewProps>
   const [isConnected, setIsConnected] = useState(false);
   const [trackingReady, setTrackingReady] = useState(false);
   const [message, setMessage] = useState(DEFAULT_MESSAGE);
+  const [renderLandmarks, setRenderLandmarks] = useState<PoseLandmarks | null>(null);
+  const [frameSize, setFrameSize] = useState({ width: 0, height: 0 });
 
   useImperativeHandle(
     ref,
@@ -294,6 +298,12 @@ export const CameraPreview = forwardRef<CameraPreviewHandle, CameraPreviewProps>
       overlayCanvas.height = video.videoHeight;
     }
 
+    setFrameSize((current) =>
+      current.width === video.videoWidth && current.height === video.videoHeight
+        ? current
+        : { width: video.videoWidth, height: video.videoHeight }
+    );
+
     overlayContext.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
 
     const landmarks =
@@ -326,13 +336,16 @@ export const CameraPreview = forwardRef<CameraPreviewHandle, CameraPreviewProps>
       missedFramesRef.current += 1;
       if (missedFramesRef.current > FALLBACK_LOSS_FRAMES) {
         currentLandmarksRef.current = null;
+        setRenderLandmarks(null);
       }
       emitTrackingStatus('신체를 다시 찾는 중입니다. 카메라 중앙으로 들어와 주세요.', false);
       return;
     }
 
     missedFramesRef.current = 0;
-    currentLandmarksRef.current = smoothLandmarks(currentLandmarksRef.current, mapped, LANDMARK_SMOOTHING_ALPHA);
+    const nextLandmarks = smoothLandmarks(currentLandmarksRef.current, mapped, LANDMARK_SMOOTHING_ALPHA);
+    currentLandmarksRef.current = nextLandmarks;
+    setRenderLandmarks(nextLandmarks);
     emitTrackingStatus('MediaPipe Pose로 신체를 추적 중입니다.', true);
   }
 
@@ -343,7 +356,7 @@ export const CameraPreview = forwardRef<CameraPreviewHandle, CameraPreviewProps>
     isFallback: boolean,
     frameHeight: number
   ) {
-    if (enableLiveOverlay && garment && garmentImageRef.current && !isFallback) {
+    if (enableLiveOverlay && garment && garmentImageRef.current && !isFallback && !showThreeDSample) {
       const nextOverlay = computeOverlayFromLandmarks(landmarks, frameHeight, garment.width, garment.height);
       const smoothed = smoothOverlay(smoothedOverlayRef.current, nextOverlay);
       smoothedOverlayRef.current = smoothed;
@@ -400,6 +413,13 @@ export const CameraPreview = forwardRef<CameraPreviewHandle, CameraPreviewProps>
         {isConnected ? (
           <>
             <video ref={videoRef} className="camera-video" autoPlay playsInline muted />
+            <ThreeDGarmentOverlay
+              objUrl="/models/polotshirt.obj"
+              frameWidth={frameSize.width}
+              frameHeight={frameSize.height}
+              landmarks={renderLandmarks}
+              visible={enableLiveOverlay && showThreeDSample && trackingReady && renderLandmarks !== null}
+            />
             <canvas ref={overlayCanvasRef} className="tracking-overlay" />
           </>
         ) : (

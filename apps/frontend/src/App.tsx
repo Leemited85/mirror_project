@@ -346,6 +346,7 @@ function App() {
             ref={cameraPreviewRef}
             garment={selectedGarment}
             enableLiveOverlay={experienceMode !== 'hq-render'}
+            showThreeDSample={experienceMode !== 'hq-render'}
             showTrackingGuide
             onStatusChange={(message, isConnected) => {
               setCameraConnected(isConnected);

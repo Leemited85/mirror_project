@@ -318,6 +318,16 @@ input {
   transform: scaleX(-1);
 }
 
+.three-d-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  pointer-events: none;
+  transform: scaleX(-1);
+}
+
 .tracking-buffer {
   display: none;
 }
