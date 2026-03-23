@@ -28,6 +28,10 @@ class PoseLandmarks(BaseModel):
     right_shoulder: PosePoint
     left_hip: PosePoint
     right_hip: PosePoint
+    left_elbow: PosePoint | None = None
+    right_elbow: PosePoint | None = None
+    left_wrist: PosePoint | None = None
+    right_wrist: PosePoint | None = None
 
 
 class OverlayBox(BaseModel):
@@ -75,6 +79,37 @@ class GarmentProcessRequest(BaseModel):
     garment_image_base64: str = Field(..., description="Raw base64 payload, without data URI prefix")
 
 
+class NormalizedPoint(BaseModel):
+    x: float = Field(..., ge=0, le=1)
+    y: float = Field(..., ge=0, le=1)
+
+
+class NormalizedRect(BaseModel):
+    x: float = Field(..., ge=0, le=1)
+    y: float = Field(..., ge=0, le=1)
+    width: float = Field(..., gt=0, le=1)
+    height: float = Field(..., gt=0, le=1)
+
+
+class GarmentPart(BaseModel):
+    id: str
+    role: Literal["torso", "left_sleeve", "right_sleeve", "hood"]
+    source_rect: NormalizedRect
+    pivot: NormalizedPoint
+    depth: int = 0
+    anchor_start: str | None = None
+    anchor_end: str | None = None
+    scale_multiplier: float = Field(default=1.0, gt=0)
+    rotation_offset_deg: float = 0
+
+
+class GarmentRig(BaseModel):
+    version: str = "1.0"
+    render_mode: Literal["segmented-2d"] = "segmented-2d"
+    anchors: dict[str, NormalizedPoint]
+    parts: list[GarmentPart]
+
+
 class GarmentAsset(BaseModel):
     id: str
     name: str
@@ -83,6 +118,7 @@ class GarmentAsset(BaseModel):
     processed_image_url: str
     width: int
     height: int
+    rig: GarmentRig | None = None
     created_at: datetime
 
 

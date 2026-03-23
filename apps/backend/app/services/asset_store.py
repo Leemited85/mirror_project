@@ -6,6 +6,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from app.models.schemas import GarmentAsset, ModelAsset, TryOnJob
+from app.services.garment_rig import build_default_garment_rig
 
 
 def ensure_directory(path: Path) -> Path:
@@ -46,7 +47,10 @@ def load_model_asset(asset_dir: Path) -> ModelAsset:
 
 
 def load_garment_asset(asset_dir: Path) -> GarmentAsset:
-    return GarmentAsset.model_validate(read_json(asset_dir / "meta.json"))
+    asset = GarmentAsset.model_validate(read_json(asset_dir / "meta.json"))
+    if asset.rig is None:
+        asset.rig = build_default_garment_rig(asset.name, asset.category)
+    return asset
 
 
 def load_tryon_job(asset_dir: Path) -> TryOnJob:
