@@ -297,6 +297,7 @@ input {
   height: 100%;
   object-fit: cover;
   display: block;
+  transform: scaleX(-1);
 }
 
 .result-image {
@@ -314,6 +315,7 @@ input {
   height: 100%;
   z-index: 2;
   pointer-events: none;
+  transform: scaleX(-1);
 }
 
 .tracking-buffer {
