@@ -7,6 +7,7 @@ import {
 } from 'react';
 import type { GarmentAsset, OverlayBox, PoseLandmarks } from '../types/fitting';
 import { computeOverlayFromLandmarks, smoothOverlay } from '../utils/fittingGeometry';
+import { drawGarmentRig } from '../utils/garmentRigRenderer';
 
 type CameraPreviewProps = {
   garment: GarmentAsset | null;
@@ -373,7 +374,11 @@ export const CameraPreview = forwardRef<CameraPreviewHandle, CameraPreviewProps>
       const nextOverlay = computeOverlayFromLandmarks(landmarks, frameHeight, garment.width, garment.height);
       const smoothed = smoothOverlay(smoothedOverlayRef.current, nextOverlay);
       smoothedOverlayRef.current = smoothed;
-      drawGarmentOverlay(context, garmentImageRef.current, smoothed);
+      if (garment.rig) {
+        drawGarmentRig(context, garment, garmentImageRef.current, landmarks, frameHeight);
+      } else {
+        drawGarmentOverlay(context, garmentImageRef.current, smoothed);
+      }
     }
 
     if (showTrackingGuide) {
@@ -468,6 +473,10 @@ function buildLandmarksFromRect(rect: TrackingRect): PoseLandmarks {
     neck: toPosePoint(points.neck),
     left_shoulder: toPosePoint(points.left_shoulder),
     right_shoulder: toPosePoint(points.right_shoulder),
+    left_elbow: toPosePoint(points.left_elbow),
+    right_elbow: toPosePoint(points.right_elbow),
+    left_wrist: toPosePoint(points.left_wrist),
+    right_wrist: toPosePoint(points.right_wrist),
     left_hip: toPosePoint(points.left_hip),
     right_hip: toPosePoint(points.right_hip)
   };
@@ -479,6 +488,10 @@ function buildPointsFromRect(rect: TrackingRect): Record<TrackingPointKey, Track
     neck: { key: 'neck', x: rect.x + rect.width * 0.5, y: rect.y + rect.height * 0.22 },
     left_shoulder: { key: 'left_shoulder', x: rect.x + rect.width * 0.28, y: rect.y + rect.height * 0.28 },
     right_shoulder: { key: 'right_shoulder', x: rect.x + rect.width * 0.72, y: rect.y + rect.height * 0.28 },
+    left_elbow: { key: 'left_elbow', x: rect.x + rect.width * 0.18, y: rect.y + rect.height * 0.5 },
+    right_elbow: { key: 'right_elbow', x: rect.x + rect.width * 0.82, y: rect.y + rect.height * 0.5 },
+    left_wrist: { key: 'left_wrist', x: rect.x + rect.width * 0.15, y: rect.y + rect.height * 0.88 },
+    right_wrist: { key: 'right_wrist', x: rect.x + rect.width * 0.85, y: rect.y + rect.height * 0.88 },
     left_hip: { key: 'left_hip', x: rect.x + rect.width * 0.38, y: rect.y + rect.height * 0.72 },
     right_hip: { key: 'right_hip', x: rect.x + rect.width * 0.62, y: rect.y + rect.height * 0.72 }
   };
@@ -507,6 +520,10 @@ function drawTrackedBody(context: CanvasRenderingContext2D, rect: TrackingRect, 
     points.neck,
     points.left_shoulder,
     points.right_shoulder,
+    points.left_elbow,
+    points.right_elbow,
+    points.left_wrist,
+    points.right_wrist,
     points.left_hip,
     points.right_hip
   ];
@@ -525,6 +542,10 @@ function drawTrackedBody(context: CanvasRenderingContext2D, rect: TrackingRect, 
   context.strokeStyle = isFallback ? 'rgba(245, 158, 11, 0.95)' : 'rgba(56, 189, 248, 0.95)';
   drawLine(context, points.neck, points.left_shoulder);
   drawLine(context, points.neck, points.right_shoulder);
+  drawLine(context, points.left_shoulder, points.left_elbow);
+  drawLine(context, points.left_elbow, points.left_wrist);
+  drawLine(context, points.right_shoulder, points.right_elbow);
+  drawLine(context, points.right_elbow, points.right_wrist);
   drawLine(context, points.left_shoulder, points.left_hip);
   drawLine(context, points.right_shoulder, points.right_hip);
   drawLine(context, points.left_hip, points.right_hip);
