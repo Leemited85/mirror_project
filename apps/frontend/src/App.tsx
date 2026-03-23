@@ -250,6 +250,9 @@ function App() {
         <div className="center-column">
           <CameraPreview
             ref={cameraPreviewRef}
+            garment={selectedGarment}
+            enableLiveOverlay
+            showTrackingGuide
             onStatusChange={(message, isConnected) => {
               setCameraConnected(isConnected);
               setStatus((current) => {
@@ -354,6 +357,7 @@ function translateCategory(category: GarmentAsset['category']) {
 function translateProvider(provider: string) {
   const labels: Record<string, string> = {
     mock: 'Mock',
+    'mock-compositor-v1': 'Mock compositor',
     mediapipe: 'MediaPipe',
     catvton: 'CatVTON',
     comfyui: 'ComfyUI'
