@@ -11,7 +11,7 @@ export function ClothesPicker({ garments, selectedGarmentId, onSelect, isLoading
   return (
     <aside className="panel sidebar">
       <h2>의류 라이브러리</h2>
-      <p className="hint">처리된 의류 자산을 보관하고 선택만 할 수 있도록 유지합니다.</p>
+      <p className="hint">처리된 의류 자산을 보고 한 벌씩 선택할 수 있습니다.</p>
       <div className="garment-list">
         {garments.map((garment) => {
           const selected = garment.id === selectedGarmentId;

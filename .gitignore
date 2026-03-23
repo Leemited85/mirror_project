@@ -1,2 +1,13 @@
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+.DS_Store
+
+node_modules/
+apps/frontend/node_modules/
+apps/frontend/dist/
+apps/frontend/.vite/
+apps/frontend/node_modules/.vite/
+
+apps/backend/data/

@@ -73,7 +73,13 @@ export type ProviderStatus = {
 };
 
 export type AppStatus = {
-  phase: 'idle' | 'camera-ready' | 'fitting' | 'processing' | 'ready' | 'error';
+  phase: 'idle' | 'camera-ready' | 'fitting' | 'processing' | 'capturing' | 'ready' | 'error';
   message: string;
   lastUpdatedAt?: string;
+};
+
+export type CaptureResponse = {
+  capture_id: string;
+  saved_path: string;
+  created_at: string;
 };

@@ -1,12 +1,21 @@
-import { useEffect, useRef, useState } from 'react';
+import {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState
+} from 'react';
+import type { PoseLandmarks } from '../types/fitting';
 
 type CameraPreviewProps = {
   onStatusChange?: (message: string, isConnected: boolean) => void;
   onTrackingChange?: (message: string, isTracking: boolean) => void;
 };
 
+type TrackingPointKey = keyof PoseLandmarks | 'head';
+
 type TrackingPoint = {
-  key: string;
+  key: TrackingPointKey;
   x: number;
   y: number;
 };
@@ -18,11 +27,27 @@ type TrackingRect = {
   height: number;
 };
 
+export type CameraSnapshot = {
+  imageDataUrl: string;
+  frameWidth: number;
+  frameHeight: number;
+  landmarks: PoseLandmarks;
+};
+
+export type CameraPreviewHandle = {
+  reconnect: () => Promise<void>;
+  captureSnapshot: () => CameraSnapshot | null;
+};
+
 const OPENCV_SCRIPT_ID = 'opencv-js-runtime';
 const OPENCV_SCRIPT_URL = 'https://docs.opencv.org/4.x/opencv.js';
 const TRACKING_AREA_THRESHOLD = 2500;
+const DEFAULT_MESSAGE = '카메라 연결 상태를 확인하고 있습니다.';
 
-export function CameraPreview({ onStatusChange, onTrackingChange }: CameraPreviewProps) {
+export const CameraPreview = forwardRef<CameraPreviewHandle, CameraPreviewProps>(function CameraPreview(
+  { onStatusChange, onTrackingChange },
+  ref
+) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const bufferCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -30,10 +55,49 @@ export function CameraPreview({ onStatusChange, onTrackingChange }: CameraPrevie
   const animationFrameRef = useRef<number | null>(null);
   const previousFrameRef = useRef<any>(null);
   const lastTrackedRectRef = useRef<TrackingRect | null>(null);
+  const lastCameraStatusRef = useRef<string | null>(null);
+  const lastTrackingStatusRef = useRef<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isConnected, setIsConnected] = useState(false);
   const [trackingReady, setTrackingReady] = useState(false);
-  const [message, setMessage] = useState('카메라 연결을 확인하고 있습니다.');
+  const [message, setMessage] = useState(DEFAULT_MESSAGE);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      reconnect: connectCamera,
+      captureSnapshot: () => {
+        if (!videoRef.current) {
+          return null;
+        }
+
+        const video = videoRef.current;
+        if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || video.videoWidth === 0 || video.videoHeight === 0) {
+          return null;
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+
+        const context = canvas.getContext('2d');
+        if (!context) {
+          return null;
+        }
+
+        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const rect = lastTrackedRectRef.current ?? buildFallbackRect(canvas.width, canvas.height);
+
+        return {
+          imageDataUrl: canvas.toDataURL('image/png'),
+          frameWidth: canvas.width,
+          frameHeight: canvas.height,
+          landmarks: buildLandmarksFromRect(rect)
+        };
+      }
+    }),
+    []
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -52,7 +116,7 @@ export function CameraPreview({ onStatusChange, onTrackingChange }: CameraPrevie
 
         startTrackingLoop();
       } catch {
-        // 카메라 또는 OpenCV 초기화 실패는 상태 메시지에서 안내한다.
+        // Camera and OpenCV errors are surfaced via UI status messages.
       }
     }
 
@@ -68,14 +132,14 @@ export function CameraPreview({ onStatusChange, onTrackingChange }: CameraPrevie
 
   async function connectCamera() {
     setIsLoading(true);
-    setMessage('카메라 연결을 확인하고 있습니다.');
+    setMessage(DEFAULT_MESSAGE);
 
     if (!navigator.mediaDevices?.getUserMedia) {
       const nextMessage = '이 브라우저는 카메라 접근을 지원하지 않습니다.';
       setIsConnected(false);
       setIsLoading(false);
       setMessage(nextMessage);
-      onStatusChange?.(nextMessage, false);
+      emitCameraStatus(nextMessage, false);
       throw new Error(nextMessage);
     }
 
@@ -98,22 +162,22 @@ export function CameraPreview({ onStatusChange, onTrackingChange }: CameraPrevie
       setIsConnected(true);
       setIsLoading(false);
       setMessage(nextMessage);
-      onStatusChange?.(nextMessage, true);
+      emitCameraStatus(nextMessage, true);
     } catch (caught) {
       const nextMessage = buildCameraErrorMessage(caught);
       setIsConnected(false);
       setIsLoading(false);
       setMessage(nextMessage);
-      onStatusChange?.(nextMessage, false);
+      emitCameraStatus(nextMessage, false);
       throw caught;
     }
   }
 
   async function ensureOpenCvLoaded() {
     if (window.cv?.Mat) {
-      const nextMessage = 'OpenCV가 준비되었습니다. 실시간 추적을 시작합니다.';
+      const nextMessage = 'OpenCV가 준비되었습니다. 추적을 시작합니다.';
       setTrackingReady(true);
-      onTrackingChange?.(nextMessage, true);
+      emitTrackingStatus(nextMessage, true);
       return;
     }
 
@@ -121,7 +185,9 @@ export function CameraPreview({ onStatusChange, onTrackingChange }: CameraPrevie
       const existing = document.getElementById(OPENCV_SCRIPT_ID) as HTMLScriptElement | null;
       if (existing) {
         existing.addEventListener('load', () => resolve(), { once: true });
-        existing.addEventListener('error', () => reject(new Error('OpenCV 스크립트를 불러오지 못했습니다.')), { once: true });
+        existing.addEventListener('error', () => reject(new Error('OpenCV 스크립트를 불러오지 못했습니다.')), {
+          once: true
+        });
         return;
       }
 
@@ -139,15 +205,15 @@ export function CameraPreview({ onStatusChange, onTrackingChange }: CameraPrevie
       if (Date.now() - startedAt > 15000) {
         const nextMessage = 'OpenCV 초기화 시간이 초과되었습니다.';
         setTrackingReady(false);
-        onTrackingChange?.(nextMessage, false);
+        emitTrackingStatus(nextMessage, false);
         throw new Error(nextMessage);
       }
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
 
-    const nextMessage = 'OpenCV가 준비되었습니다. 실시간 추적을 시작합니다.';
+    const nextMessage = 'OpenCV가 준비되었습니다. 추적을 시작합니다.';
     setTrackingReady(true);
-    onTrackingChange?.(nextMessage, true);
+    emitTrackingStatus(nextMessage, true);
   }
 
   function startTrackingLoop() {
@@ -242,8 +308,8 @@ export function CameraPreview({ onStatusChange, onTrackingChange }: CameraPrevie
     const resolvedRect = biggestRect ?? lastTrackedRectRef.current ?? buildFallbackRect(video.videoWidth, video.videoHeight);
     lastTrackedRectRef.current = resolvedRect;
     drawTrackedBody(overlayContext, resolvedRect, !biggestRect);
-    onTrackingChange?.(
-      biggestRect ? 'OpenCV 기반 포인트를 추적 중입니다.' : '움직임이 적어 기본 추정 포인트를 표시 중입니다.',
+    emitTrackingStatus(
+      biggestRect ? 'OpenCV 기반으로 사용자를 추적 중입니다.' : '움직임이 적어 기본 추정 가이드를 유지하고 있습니다.',
       true
     );
 
@@ -277,11 +343,29 @@ export function CameraPreview({ onStatusChange, onTrackingChange }: CameraPrevie
     }
   }
 
+  function emitCameraStatus(nextMessage: string, isNextConnected: boolean) {
+    if (lastCameraStatusRef.current === nextMessage) {
+      return;
+    }
+
+    lastCameraStatusRef.current = nextMessage;
+    onStatusChange?.(nextMessage, isNextConnected);
+  }
+
+  function emitTrackingStatus(nextMessage: string, isNextTracking: boolean) {
+    if (lastTrackingStatusRef.current === nextMessage) {
+      return;
+    }
+
+    lastTrackingStatusRef.current = nextMessage;
+    onTrackingChange?.(nextMessage, isNextTracking);
+  }
+
   return (
     <section className="panel">
       <div className="photo-meta">
         <span className="photo-label">실시간 카메라</span>
-        <strong>{isConnected ? '카메라 미리보기 연결됨' : '카메라 연결 필요'}</strong>
+        <strong>{isConnected ? '카메라 미리보기가 연결됨' : '카메라 연결 필요'}</strong>
         <p>{message}</p>
       </div>
 
@@ -296,7 +380,7 @@ export function CameraPreview({ onStatusChange, onTrackingChange }: CameraPrevie
           <div className="empty-state">
             <div>
               <strong>{isLoading ? '카메라 연결 중입니다.' : '카메라 화면을 표시할 수 없습니다.'}</strong>
-              <p>브라우저 권한과 장치 연결 상태를 확인한 뒤 다시 시도하세요.</p>
+              <p>브라우저 권한과 장치 연결 상태를 확인한 뒤 다시 시도해 주세요.</p>
             </div>
           </div>
         )}
@@ -304,14 +388,14 @@ export function CameraPreview({ onStatusChange, onTrackingChange }: CameraPrevie
 
       <div className="camera-summary">
         <span>카메라: {isConnected ? '연결됨' : isLoading ? '확인 중' : '연결 실패'}</span>
-        <span>트래킹: {trackingReady ? '포인트 표시 중' : '준비 중'}</span>
+        <span>추적: {trackingReady ? '가이드 표시 중' : '준비 중'}</span>
         <button type="button" className="secondary-action-button" onClick={() => void connectCamera()}>
           카메라 다시 연결
         </button>
       </div>
     </section>
   );
-}
+});
 
 function buildFallbackRect(width: number, height: number): TrackingRect {
   return {
@@ -322,14 +406,44 @@ function buildFallbackRect(width: number, height: number): TrackingRect {
   };
 }
 
+function buildLandmarksFromRect(rect: TrackingRect): PoseLandmarks {
+  const points = buildPointsFromRect(rect);
+  return {
+    neck: toPosePoint(points.neck),
+    left_shoulder: toPosePoint(points.left_shoulder),
+    right_shoulder: toPosePoint(points.right_shoulder),
+    left_hip: toPosePoint(points.left_hip),
+    right_hip: toPosePoint(points.right_hip)
+  };
+}
+
+function buildPointsFromRect(rect: TrackingRect): Record<TrackingPointKey, TrackingPoint> {
+  return {
+    head: { key: 'head', x: rect.x + rect.width * 0.5, y: rect.y + rect.height * 0.12 },
+    neck: { key: 'neck', x: rect.x + rect.width * 0.5, y: rect.y + rect.height * 0.22 },
+    left_shoulder: { key: 'left_shoulder', x: rect.x + rect.width * 0.28, y: rect.y + rect.height * 0.28 },
+    right_shoulder: { key: 'right_shoulder', x: rect.x + rect.width * 0.72, y: rect.y + rect.height * 0.28 },
+    left_hip: { key: 'left_hip', x: rect.x + rect.width * 0.38, y: rect.y + rect.height * 0.72 },
+    right_hip: { key: 'right_hip', x: rect.x + rect.width * 0.62, y: rect.y + rect.height * 0.72 }
+  };
+}
+
+function toPosePoint(point: TrackingPoint) {
+  return {
+    x: Math.round(point.x),
+    y: Math.round(point.y)
+  };
+}
+
 function drawTrackedBody(context: CanvasRenderingContext2D, rect: TrackingRect, isFallback: boolean) {
-  const points: TrackingPoint[] = [
-    { key: 'head', x: rect.x + rect.width * 0.5, y: rect.y + rect.height * 0.12 },
-    { key: 'neck', x: rect.x + rect.width * 0.5, y: rect.y + rect.height * 0.22 },
-    { key: 'left_shoulder', x: rect.x + rect.width * 0.28, y: rect.y + rect.height * 0.28 },
-    { key: 'right_shoulder', x: rect.x + rect.width * 0.72, y: rect.y + rect.height * 0.28 },
-    { key: 'left_hip', x: rect.x + rect.width * 0.38, y: rect.y + rect.height * 0.72 },
-    { key: 'right_hip', x: rect.x + rect.width * 0.62, y: rect.y + rect.height * 0.72 }
+  const points = buildPointsFromRect(rect);
+  const orderedPoints: TrackingPoint[] = [
+    points.head,
+    points.neck,
+    points.left_shoulder,
+    points.right_shoulder,
+    points.left_hip,
+    points.right_hip
   ];
 
   context.strokeStyle = isFallback ? 'rgba(245, 158, 11, 0.95)' : 'rgba(56, 189, 248, 0.95)';
@@ -344,13 +458,13 @@ function drawTrackedBody(context: CanvasRenderingContext2D, rect: TrackingRect, 
   context.fillText(isFallback ? 'tracking: fallback guide' : 'tracking: active contour', rect.x + 8, Math.max(14, rect.y - 10));
 
   context.strokeStyle = isFallback ? 'rgba(245, 158, 11, 0.95)' : 'rgba(56, 189, 248, 0.95)';
-  drawLine(context, points[1], points[2]);
-  drawLine(context, points[1], points[3]);
-  drawLine(context, points[2], points[4]);
-  drawLine(context, points[3], points[5]);
-  drawLine(context, points[4], points[5]);
+  drawLine(context, points.neck, points.left_shoulder);
+  drawLine(context, points.neck, points.right_shoulder);
+  drawLine(context, points.left_shoulder, points.left_hip);
+  drawLine(context, points.right_shoulder, points.right_hip);
+  drawLine(context, points.left_hip, points.right_hip);
 
-  for (const point of points) {
+  for (const point of orderedPoints) {
     context.fillStyle = 'rgba(249, 115, 22, 0.95)';
     context.beginPath();
     context.arc(point.x, point.y, 6, 0, Math.PI * 2);
@@ -370,7 +484,7 @@ function drawLine(context: CanvasRenderingContext2D, from: TrackingPoint, to: Tr
 function buildCameraErrorMessage(error: unknown) {
   if (error instanceof DOMException) {
     if (error.name === 'NotAllowedError') {
-      return '카메라 권한이 거부되었습니다. 브라우저 권한을 허용해주세요.';
+      return '카메라 권한이 거부되었습니다. 브라우저 권한을 허용해 주세요.';
     }
     if (error.name === 'NotFoundError') {
       return '사용 가능한 카메라 장치를 찾지 못했습니다.';
