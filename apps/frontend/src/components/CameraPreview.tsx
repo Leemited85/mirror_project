@@ -625,7 +625,7 @@ function visiblePoint(
     return null;
   }
 
-  return point(landmark.x * frameWidth, landmark.y * frameHeight);
+  return point((1 - landmark.x) * frameWidth, landmark.y * frameHeight);
 }
 
 function point(x: number, y: number): PosePoint {
