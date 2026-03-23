@@ -50,6 +50,7 @@ export function drawGarmentRig(
 
   const draws = garment.rig.parts
     .map((part) => buildRiggedPartDraw(part, garment.rig as GarmentRig, garment, landmarks, frameHeight))
+    .filter((draw): draw is RiggedPartDraw => draw !== null)
     .sort((left, right) => left.part.depth - right.part.depth);
 
   for (const draw of draws) {
@@ -66,7 +67,7 @@ function buildRiggedPartDraw(
   garment: GarmentAsset,
   landmarks: PoseLandmarks,
   frameHeight: number
-): RiggedPartDraw {
+): RiggedPartDraw | null {
   if (part.role === 'torso') {
     return buildTorsoDraw(part, rig, garment, landmarks, frameHeight);
   }
@@ -134,13 +135,14 @@ function buildSleeveDraw(
   _rig: GarmentRig,
   garment: GarmentAsset,
   landmarks: PoseLandmarks
-): RiggedPartDraw {
+): RiggedPartDraw | null {
   const fallbackStart = part.role === 'left_sleeve' ? landmarks.left_shoulder : landmarks.right_shoulder;
-  const fallbackMid = part.role === 'left_sleeve' ? landmarks.left_elbow ?? landmarks.left_hip : landmarks.right_elbow ?? landmarks.right_hip;
-  const fallbackEnd = part.role === 'left_sleeve' ? landmarks.left_wrist ?? landmarks.left_hip : landmarks.right_wrist ?? landmarks.right_hip;
+  const mid = part.role === 'left_sleeve' ? landmarks.left_elbow : landmarks.right_elbow;
+  const end = resolveLandmark(part.anchor_end, landmarks);
   const start = resolveLandmark(part.anchor_start, landmarks) ?? fallbackStart;
-  const mid = fallbackMid;
-  const end = resolveLandmark(part.anchor_end, landmarks) ?? fallbackEnd;
+  if (!mid || !end) {
+    return null;
+  }
   const upperLength = distance(start, mid);
   const lowerLength = distance(mid, end);
   const sleeveLength = Math.max(upperLength + lowerLength, garment.height * part.source_rect.height * 0.55);

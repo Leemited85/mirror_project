@@ -57,9 +57,9 @@ type TrackingRect = {
 const MEDIAPIPE_POSE_SCRIPT_ID = 'mediapipe-pose-runtime';
 const MEDIAPIPE_POSE_SCRIPT_URL = 'https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js';
 const DEFAULT_MESSAGE = '카메라 연결 상태를 확인하고 있습니다.';
-const MIN_VISIBILITY = 0.45;
-const LANDMARK_SMOOTHING_ALPHA = 0.28;
-const FALLBACK_LOSS_FRAMES = 18;
+const MIN_VISIBILITY = 0.2;
+const LANDMARK_SMOOTHING_ALPHA = 0.2;
+const FALLBACK_LOSS_FRAMES = 24;
 
 export const CameraPreview = forwardRef<CameraPreviewHandle, CameraPreviewProps>(function CameraPreview(
   { garment, enableLiveOverlay = true, showTrackingGuide = true, onStatusChange, onTrackingChange },
@@ -241,11 +241,12 @@ export const CameraPreview = forwardRef<CameraPreviewHandle, CameraPreviewProps>
     }) as PoseLikeInstance;
 
     pose.setOptions({
-      modelComplexity: 1,
+      modelComplexity: 0,
+      selfieMode: true,
       smoothLandmarks: true,
       enableSegmentation: false,
-      minDetectionConfidence: 0.55,
-      minTrackingConfidence: 0.55
+      minDetectionConfidence: 0.35,
+      minTrackingConfidence: 0.35
     });
     pose.onResults(handlePoseResults);
 
@@ -342,7 +343,7 @@ export const CameraPreview = forwardRef<CameraPreviewHandle, CameraPreviewProps>
     isFallback: boolean,
     frameHeight: number
   ) {
-    if (enableLiveOverlay && garment && garmentImageRef.current) {
+    if (enableLiveOverlay && garment && garmentImageRef.current && !isFallback) {
       const nextOverlay = computeOverlayFromLandmarks(landmarks, frameHeight, garment.width, garment.height);
       const smoothed = smoothOverlay(smoothedOverlayRef.current, nextOverlay);
       smoothedOverlayRef.current = smoothed;
@@ -569,14 +570,18 @@ function mapPoseResultsToLandmarks(
     return null;
   }
 
+  if (Math.abs(rightShoulder.x - leftShoulder.x) < 36) {
+    return null;
+  }
+
   return {
     neck: point((leftShoulder.x + rightShoulder.x) / 2, (leftShoulder.y + rightShoulder.y) / 2),
     left_shoulder: leftShoulder,
     right_shoulder: rightShoulder,
-    left_elbow: visiblePoint(poseLandmarks[13], frameWidth, frameHeight) ?? leftShoulder,
-    right_elbow: visiblePoint(poseLandmarks[14], frameWidth, frameHeight) ?? rightShoulder,
-    left_wrist: visiblePoint(poseLandmarks[15], frameWidth, frameHeight) ?? leftHip,
-    right_wrist: visiblePoint(poseLandmarks[16], frameWidth, frameHeight) ?? rightHip,
+    left_elbow: visiblePoint(poseLandmarks[13], frameWidth, frameHeight),
+    right_elbow: visiblePoint(poseLandmarks[14], frameWidth, frameHeight),
+    left_wrist: visiblePoint(poseLandmarks[15], frameWidth, frameHeight),
+    right_wrist: visiblePoint(poseLandmarks[16], frameWidth, frameHeight),
     left_hip: leftHip,
     right_hip: rightHip
   };
