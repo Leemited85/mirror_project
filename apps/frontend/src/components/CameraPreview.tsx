@@ -5,9 +5,13 @@ import {
   useRef,
   useState
 } from 'react';
-import type { PoseLandmarks } from '../types/fitting';
+import type { GarmentAsset, OverlayBox, PoseLandmarks } from '../types/fitting';
+import { computeOverlayFromLandmarks, smoothOverlay } from '../utils/fittingGeometry';
 
 type CameraPreviewProps = {
+  garment: GarmentAsset | null;
+  enableLiveOverlay?: boolean;
+  showTrackingGuide?: boolean;
   onStatusChange?: (message: string, isConnected: boolean) => void;
   onTrackingChange?: (message: string, isTracking: boolean) => void;
 };
@@ -45,7 +49,7 @@ const TRACKING_AREA_THRESHOLD = 2500;
 const DEFAULT_MESSAGE = '카메라 연결 상태를 확인하고 있습니다.';
 
 export const CameraPreview = forwardRef<CameraPreviewHandle, CameraPreviewProps>(function CameraPreview(
-  { onStatusChange, onTrackingChange },
+  { garment, enableLiveOverlay = true, showTrackingGuide = true, onStatusChange, onTrackingChange },
   ref
 ) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -55,6 +59,8 @@ export const CameraPreview = forwardRef<CameraPreviewHandle, CameraPreviewProps>
   const animationFrameRef = useRef<number | null>(null);
   const previousFrameRef = useRef<any>(null);
   const lastTrackedRectRef = useRef<TrackingRect | null>(null);
+  const smoothedOverlayRef = useRef<OverlayBox | null>(null);
+  const garmentImageRef = useRef<HTMLImageElement | null>(null);
   const lastCameraStatusRef = useRef<string | null>(null);
   const lastTrackingStatusRef = useRef<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -116,7 +122,7 @@ export const CameraPreview = forwardRef<CameraPreviewHandle, CameraPreviewProps>
 
         startTrackingLoop();
       } catch {
-        // Camera and OpenCV errors are surfaced via UI status messages.
+        // Surface errors through the status panel only.
       }
     }
 
@@ -129,6 +135,36 @@ export const CameraPreview = forwardRef<CameraPreviewHandle, CameraPreviewProps>
       releasePreviousFrame();
     };
   }, []);
+
+  useEffect(() => {
+    smoothedOverlayRef.current = null;
+  }, [garment?.id]);
+
+  useEffect(() => {
+    if (!garment?.processed_image_url) {
+      garmentImageRef.current = null;
+      return;
+    }
+
+    let cancelled = false;
+    const image = new Image();
+    image.crossOrigin = 'anonymous';
+    image.onload = () => {
+      if (!cancelled) {
+        garmentImageRef.current = image;
+      }
+    };
+    image.onerror = () => {
+      if (!cancelled) {
+        garmentImageRef.current = null;
+      }
+    };
+    image.src = garment.processed_image_url;
+
+    return () => {
+      cancelled = true;
+    };
+  }, [garment?.processed_image_url]);
 
   async function connectCamera() {
     setIsLoading(true);
@@ -175,7 +211,7 @@ export const CameraPreview = forwardRef<CameraPreviewHandle, CameraPreviewProps>
 
   async function ensureOpenCvLoaded() {
     if (window.cv?.Mat) {
-      const nextMessage = 'OpenCV가 준비되었습니다. 추적을 시작합니다.';
+      const nextMessage = 'OpenCV가 준비되었습니다. 사용자 추적을 시작합니다.';
       setTrackingReady(true);
       emitTrackingStatus(nextMessage, true);
       return;
@@ -211,7 +247,7 @@ export const CameraPreview = forwardRef<CameraPreviewHandle, CameraPreviewProps>
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
 
-    const nextMessage = 'OpenCV가 준비되었습니다. 추적을 시작합니다.';
+    const nextMessage = 'OpenCV가 준비되었습니다. 사용자 추적을 시작합니다.';
     setTrackingReady(true);
     emitTrackingStatus(nextMessage, true);
   }
@@ -275,7 +311,7 @@ export const CameraPreview = forwardRef<CameraPreviewHandle, CameraPreviewProps>
       previousFrameRef.current = gray.clone();
       const initialRect = buildFallbackRect(video.videoWidth, video.videoHeight);
       lastTrackedRectRef.current = initialRect;
-      drawTrackedBody(overlayContext, initialRect, true);
+      drawOverlayForRect(overlayContext, initialRect, true, video.videoHeight);
       source.delete();
       gray.delete();
       return;
@@ -307,7 +343,7 @@ export const CameraPreview = forwardRef<CameraPreviewHandle, CameraPreviewProps>
 
     const resolvedRect = biggestRect ?? lastTrackedRectRef.current ?? buildFallbackRect(video.videoWidth, video.videoHeight);
     lastTrackedRectRef.current = resolvedRect;
-    drawTrackedBody(overlayContext, resolvedRect, !biggestRect);
+    drawOverlayForRect(overlayContext, resolvedRect, !biggestRect, video.videoHeight);
     emitTrackingStatus(
       biggestRect ? 'OpenCV 기반으로 사용자를 추적 중입니다.' : '움직임이 적어 기본 추정 가이드를 유지하고 있습니다.',
       true
@@ -323,6 +359,26 @@ export const CameraPreview = forwardRef<CameraPreviewHandle, CameraPreviewProps>
     contours.delete();
     hierarchy.delete();
     kernel.delete();
+  }
+
+  function drawOverlayForRect(
+    context: CanvasRenderingContext2D,
+    rect: TrackingRect,
+    isFallback: boolean,
+    frameHeight: number
+  ) {
+    const landmarks = buildLandmarksFromRect(rect);
+
+    if (enableLiveOverlay && garment && garmentImageRef.current) {
+      const nextOverlay = computeOverlayFromLandmarks(landmarks, frameHeight, garment.width, garment.height);
+      const smoothed = smoothOverlay(smoothedOverlayRef.current, nextOverlay);
+      smoothedOverlayRef.current = smoothed;
+      drawGarmentOverlay(context, garmentImageRef.current, smoothed);
+    }
+
+    if (showTrackingGuide) {
+      drawTrackedBody(context, rect, isFallback);
+    }
   }
 
   function stopCamera() {
@@ -433,6 +489,15 @@ function toPosePoint(point: TrackingPoint) {
     x: Math.round(point.x),
     y: Math.round(point.y)
   };
+}
+
+function drawGarmentOverlay(context: CanvasRenderingContext2D, image: HTMLImageElement, overlay: OverlayBox) {
+  context.save();
+  context.translate(overlay.x + overlay.width / 2, overlay.y + overlay.height / 2);
+  context.rotate((overlay.rotation_deg * Math.PI) / 180);
+  context.globalAlpha = 0.92;
+  context.drawImage(image, -overlay.width / 2, -overlay.height / 2, overlay.width, overlay.height);
+  context.restore();
 }
 
 function drawTrackedBody(context: CanvasRenderingContext2D, rect: TrackingRect, isFallback: boolean) {
