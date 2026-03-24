@@ -7,6 +7,7 @@ type ThreeDGarmentOverlayProps = {
   frameHeight: number;
   landmarks: PoseLandmarks | null;
   visible: boolean;
+  fitScale?: number;
 };
 
 type Vec3 = {
@@ -33,7 +34,8 @@ export function ThreeDGarmentOverlay({
   frameWidth,
   frameHeight,
   landmarks,
-  visible
+  visible,
+  fitScale = 0.78
 }: ThreeDGarmentOverlayProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const meshRef = useRef<ObjMesh | null>(null);
@@ -52,12 +54,12 @@ export function ThreeDGarmentOverlay({
         const mesh = normalizeMesh(parseObj(source));
         if (!cancelled) {
           meshRef.current = mesh;
-          drawOverlay(canvasRef.current, mesh, frameWidth, frameHeight, landmarks, visible);
+          drawOverlay(canvasRef.current, mesh, frameWidth, frameHeight, landmarks, visible, fitScale);
         }
       } catch {
         if (!cancelled) {
           meshRef.current = null;
-          drawOverlay(canvasRef.current, null, frameWidth, frameHeight, landmarks, false);
+          drawOverlay(canvasRef.current, null, frameWidth, frameHeight, landmarks, false, fitScale);
         }
       }
     }
@@ -67,7 +69,7 @@ export function ThreeDGarmentOverlay({
     return () => {
       cancelled = true;
     };
-  }, [objUrl]);
+  }, [fitScale, objUrl]);
 
   const drawKey = useMemo(
     () =>
@@ -81,8 +83,8 @@ export function ThreeDGarmentOverlay({
   );
 
   useEffect(() => {
-    drawOverlay(canvasRef.current, meshRef.current, frameWidth, frameHeight, landmarks, visible);
-  }, [drawKey, frameHeight, frameWidth, landmarks, visible]);
+    drawOverlay(canvasRef.current, meshRef.current, frameWidth, frameHeight, landmarks, visible, fitScale);
+  }, [drawKey, fitScale, frameHeight, frameWidth, landmarks, visible]);
 
   return <canvas ref={canvasRef} className="three-d-overlay" />;
 }
@@ -93,7 +95,8 @@ function drawOverlay(
   frameWidth: number,
   frameHeight: number,
   landmarks: PoseLandmarks | null,
-  visible: boolean
+  visible: boolean,
+  fitScale: number
 ) {
   if (!canvas) {
     return;
@@ -115,7 +118,7 @@ function drawOverlay(
     return;
   }
 
-  const projected = projectMesh(mesh, landmarks);
+  const projected = projectMesh(mesh, landmarks, fitScale);
   for (const triangle of projected) {
     context.beginPath();
     context.moveTo(triangle.points[0].x, triangle.points[0].y);
@@ -130,23 +133,27 @@ function drawOverlay(
   }
 }
 
-function projectMesh(mesh: ObjMesh, landmarks: PoseLandmarks): ProjectedTriangle[] {
+function projectMesh(mesh: ObjMesh, landmarks: PoseLandmarks, fitScale: number): ProjectedTriangle[] {
   const shoulderMid = midpoint(landmarks.left_shoulder, landmarks.right_shoulder);
   const hipMid = midpoint(landmarks.left_hip, landmarks.right_hip);
   const shoulderSpan = distance(landmarks.left_shoulder, landmarks.right_shoulder);
   const torsoHeight = Math.max(distance(shoulderMid, hipMid), shoulderSpan * 0.9);
-  const center = midpoint(shoulderMid, hipMid);
+  const center = {
+    x: (shoulderMid.x + hipMid.x) / 2,
+    y: shoulderMid.y + torsoHeight * 0.38
+  };
   const roll = Math.atan2(
     landmarks.right_shoulder.y - landmarks.left_shoulder.y,
     landmarks.right_shoulder.x - landmarks.left_shoulder.x
   );
   const yaw = clamp((hipMid.x - shoulderMid.x) / Math.max(shoulderSpan, 1), -0.28, 0.28);
   const pitch = clamp((hipMid.y - shoulderMid.y) / Math.max(torsoHeight, 1) - 1, -0.18, 0.2);
-  const scaleX = shoulderSpan * 1.3;
-  const scaleY = torsoHeight * 1.95;
-  const scaleZ = shoulderSpan * 0.9;
+  const baseScale = clamp(fitScale, 0.45, 1.15);
+  const scaleX = shoulderSpan * 0.92 * baseScale;
+  const scaleY = torsoHeight * 1.28 * baseScale;
+  const scaleZ = shoulderSpan * 0.62 * baseScale;
   const cameraDepth = 3.1;
-  const perspective = shoulderSpan * 1.65;
+  const perspective = shoulderSpan * 1.1 * baseScale;
 
   const transformedVertices = mesh.vertices.map((vertex) => {
     let next = { ...vertex };

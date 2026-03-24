@@ -83,6 +83,7 @@ export const CameraPreview = forwardRef<CameraPreviewHandle, CameraPreviewProps>
   const [isLoading, setIsLoading] = useState(true);
   const [isConnected, setIsConnected] = useState(false);
   const [trackingReady, setTrackingReady] = useState(false);
+  const [isTracking, setIsTracking] = useState(false);
   const [message, setMessage] = useState(DEFAULT_MESSAGE);
   const [renderLandmarks, setRenderLandmarks] = useState<PoseLandmarks | null>(null);
   const [frameSize, setFrameSize] = useState({ width: 0, height: 0 });
@@ -228,7 +229,7 @@ export const CameraPreview = forwardRef<CameraPreviewHandle, CameraPreviewProps>
   async function ensurePoseLoaded() {
     if (poseRef.current) {
       setTrackingReady(true);
-      emitTrackingStatus('MediaPipe Pose가 준비되었습니다. 실시간 추적을 시작합니다.', true);
+      emitTrackingStatus('MediaPipe Pose가 준비되었습니다. 신체 입력을 기다리고 있습니다.', false);
       return;
     }
 
@@ -256,7 +257,7 @@ export const CameraPreview = forwardRef<CameraPreviewHandle, CameraPreviewProps>
 
     poseRef.current = pose;
     setTrackingReady(true);
-    emitTrackingStatus('MediaPipe Pose가 준비되었습니다. 실시간 추적을 시작합니다.', true);
+    emitTrackingStatus('MediaPipe Pose가 준비되었습니다. 신체 입력을 기다리고 있습니다.', false);
   }
 
   function startTrackingLoop() {
@@ -398,6 +399,7 @@ export const CameraPreview = forwardRef<CameraPreviewHandle, CameraPreviewProps>
     }
 
     lastTrackingStatusRef.current = nextMessage;
+    setIsTracking(isNextTracking);
     onTrackingChange?.(nextMessage, isNextTracking);
   }
 
@@ -418,6 +420,7 @@ export const CameraPreview = forwardRef<CameraPreviewHandle, CameraPreviewProps>
               frameWidth={frameSize.width}
               frameHeight={frameSize.height}
               landmarks={renderLandmarks}
+              fitScale={0.72}
               visible={enableLiveOverlay && showThreeDSample && trackingReady && renderLandmarks !== null}
             />
             <canvas ref={overlayCanvasRef} className="tracking-overlay" />
@@ -434,7 +437,7 @@ export const CameraPreview = forwardRef<CameraPreviewHandle, CameraPreviewProps>
 
       <div className="camera-summary">
         <span>카메라: {isConnected ? '연결됨' : isLoading ? '확인 중' : '연결 실패'}</span>
-        <span>추적: {trackingReady ? 'MediaPipe Pose 동작 중' : '준비 중'}</span>
+        <span>추적: {trackingReady ? (isTracking ? '신체 추적 중' : '포즈 엔진 준비됨') : '준비 중'}</span>
         <button type="button" className="secondary-action-button" onClick={() => void connectCamera()}>
           카메라 다시 연결
         </button>
