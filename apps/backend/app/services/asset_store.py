@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
-from app.models.schemas import GarmentAsset, ModelAsset, TryOnJob
+from app.models.schemas import GarmentAsset, ModelAsset, ThreeDAsset, ThreeDConversionJob, TryOnJob
 from app.services.garment_rig import build_default_garment_rig
 
 
@@ -42,6 +42,14 @@ def save_tryon_job(asset_dir: Path, job: TryOnJob) -> None:
     write_json(asset_dir / "meta.json", job.model_dump(mode="json"))
 
 
+def save_three_d_asset(asset_dir: Path, asset: ThreeDAsset) -> None:
+    write_json(asset_dir / "meta.json", asset.model_dump(mode="json"))
+
+
+def save_three_d_conversion_job(asset_dir: Path, job: ThreeDConversionJob) -> None:
+    write_json(asset_dir / "meta.json", job.model_dump(mode="json"))
+
+
 def load_model_asset(asset_dir: Path) -> ModelAsset:
     return ModelAsset.model_validate(read_json(asset_dir / "meta.json"))
 
@@ -57,6 +65,14 @@ def load_tryon_job(asset_dir: Path) -> TryOnJob:
     return TryOnJob.model_validate(read_json(asset_dir / "meta.json"))
 
 
+def load_three_d_asset(asset_dir: Path) -> ThreeDAsset:
+    return ThreeDAsset.model_validate(read_json(asset_dir / "meta.json"))
+
+
+def load_three_d_conversion_job(asset_dir: Path) -> ThreeDConversionJob:
+    return ThreeDConversionJob.model_validate(read_json(asset_dir / "meta.json"))
+
+
 def list_model_assets(root: Path) -> list[ModelAsset]:
     if not root.exists():
         return []
@@ -67,3 +83,9 @@ def list_garment_assets(root: Path) -> list[GarmentAsset]:
     if not root.exists():
         return []
     return [load_garment_asset(path) for path in sorted(root.iterdir()) if path.is_dir() and (path / "meta.json").exists()]
+
+
+def list_three_d_assets(root: Path) -> list[ThreeDAsset]:
+    if not root.exists():
+        return []
+    return [load_three_d_asset(path) for path in sorted(root.iterdir()) if path.is_dir() and (path / "meta.json").exists()]

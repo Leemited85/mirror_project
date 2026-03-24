@@ -18,6 +18,8 @@ class Settings:
     models_dir: Path
     garments_dir: Path
     tryon_dir: Path
+    three_d_assets_dir: Path
+    three_d_conversion_jobs_dir: Path
     static_data_url_prefix: str
     pose_provider: str
     vton_provider: str
@@ -39,6 +41,8 @@ def get_settings() -> Settings:
     models_dir = data_root / "models"
     garments_dir = data_root / "garments"
     tryon_dir = data_root / "tryon"
+    three_d_assets_dir = data_root / "3d-assets"
+    three_d_conversion_jobs_dir = data_root / "3d-conversion-jobs"
     workflow_path_value = os.getenv("COMFYUI_WORKFLOW_PATH")
     comfyui_workflow_path = None
     if workflow_path_value:
@@ -56,6 +60,8 @@ def get_settings() -> Settings:
         models_dir=models_dir,
         garments_dir=garments_dir,
         tryon_dir=tryon_dir,
+        three_d_assets_dir=three_d_assets_dir,
+        three_d_conversion_jobs_dir=three_d_conversion_jobs_dir,
         static_data_url_prefix=os.getenv("STATIC_DATA_URL_PREFIX", "/static/data"),
         pose_provider=os.getenv("POSE_PROVIDER", "mock"),
         vton_provider=os.getenv("VTON_PROVIDER", "mock"),
@@ -75,6 +81,8 @@ def ensure_runtime_directories(settings: Settings) -> None:
         settings.models_dir,
         settings.garments_dir,
         settings.tryon_dir,
+        settings.three_d_assets_dir,
+        settings.three_d_conversion_jobs_dir,
         settings.captures_dir,
     ):
         path.mkdir(parents=True, exist_ok=True)

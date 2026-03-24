@@ -126,6 +126,82 @@ class GarmentListResponse(BaseModel):
     items: List[GarmentAsset]
 
 
+class ThreeDSourceUpload(BaseModel):
+    filename: str
+    file_format: Literal["obj", "ma", "fbx", "gltf", "glb"]
+    file_base64: str = Field(..., description="Raw base64 payload, without data URI prefix")
+
+
+class ThreeDSourceFile(BaseModel):
+    filename: str
+    file_format: Literal["obj", "ma", "fbx", "gltf", "glb"]
+    file_url: str
+    size_bytes: int = Field(..., ge=0)
+
+
+class ThreeDMeshStats(BaseModel):
+    vertex_count: int = Field(default=0, ge=0)
+    face_count: int = Field(default=0, ge=0)
+    source_mesh_count: int = Field(default=0, ge=0)
+
+
+class ThreeDRigBone(BaseModel):
+    name: str
+    parent: str | None = None
+    role: Literal["root", "spine", "neck", "shoulder", "upper_arm", "lower_arm", "hip", "cloth"]
+    bind_point: NormalizedPoint
+
+
+class ThreeDRigMetadata(BaseModel):
+    version: str = "1.0"
+    rig_type: Literal["none", "template-upper-body"] = "template-upper-body"
+    skinning_status: Literal["unskinned", "template-skinned", "manual"] = "template-skinned"
+    bones: list[ThreeDRigBone]
+
+
+class ThreeDAsset(BaseModel):
+    id: str
+    name: str
+    category: Literal["top", "bottom", "dress"]
+    status: Literal["staged", "converted", "failed"] = "staged"
+    source_files: list[ThreeDSourceFile]
+    glb_url: str | None = None
+    preview_image_url: str | None = None
+    rig: ThreeDRigMetadata | None = None
+    mesh_stats: ThreeDMeshStats | None = None
+    conversion_engine: str
+    warnings: list[str] = Field(default_factory=list)
+    created_at: datetime
+    updated_at: datetime
+
+
+class ThreeDAssetListResponse(BaseModel):
+    items: list[ThreeDAsset]
+
+
+class ThreeDConversionJobRequest(BaseModel):
+    name: str | None = None
+    category: Literal["top", "bottom", "dress"] = "top"
+    target_format: Literal["glb"] = "glb"
+    rig_strategy: Literal["none", "template-upper-body"] = "template-upper-body"
+    source_files: list[ThreeDSourceUpload] = Field(..., min_length=1)
+
+
+class ThreeDConversionJob(BaseModel):
+    id: str
+    asset_id: str
+    name: str
+    category: Literal["top", "bottom", "dress"]
+    target_format: Literal["glb"] = "glb"
+    status: Literal["queued", "running", "succeeded", "failed"]
+    source_files: list[ThreeDSourceFile]
+    output_asset: ThreeDAsset | None = None
+    conversion_engine: str
+    warnings: list[str] = Field(default_factory=list)
+    created_at: datetime
+    updated_at: datetime
+
+
 class TryOnJobRequest(BaseModel):
     model_id: str
     garment_id: str

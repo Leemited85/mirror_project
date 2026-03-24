@@ -14,6 +14,11 @@ from app.models.schemas import (
     ModelAsset,
     ModelListResponse,
     ProviderStatusResponse,
+    ThreeDAsset,
+    ThreeDAssetListResponse,
+    ThreeDConversionJob,
+    ThreeDConversionJobRequest,
+    ThreeDSourceFile,
     TryOnJob,
     TryOnJobRequest,
 )
@@ -22,12 +27,16 @@ from app.services.asset_store import (
     ensure_directory,
     list_garment_assets,
     list_model_assets,
+    list_three_d_assets,
     load_garment_asset,
     load_model_asset,
+    load_three_d_conversion_job,
     load_tryon_job,
     now_utc,
     save_garment_asset,
     save_model_asset,
+    save_three_d_asset,
+    save_three_d_conversion_job,
     save_tryon_job,
 )
 from app.services.capture_service import save_capture
@@ -36,6 +45,7 @@ from app.services.garment_processing import remove_background
 from app.services.garment_rig import build_default_garment_rig
 from app.services.image_utils import decode_base64_image, save_image_bytes
 from app.services.pose import create_pose_provider
+from app.services.three_d_assets import build_default_3d_rig, build_mesh_stats, select_glb_artifact
 from app.services.vton import create_vton_provider
 
 router = APIRouter()
@@ -125,6 +135,88 @@ def process_garment(
 @router.get("/api/garments", response_model=GarmentListResponse)
 def list_garments(settings: Settings = Depends(get_settings)) -> GarmentListResponse:
     return GarmentListResponse(items=list_garment_assets(settings.garments_dir))
+
+
+@router.get("/api/3d-assets", response_model=ThreeDAssetListResponse)
+def list_three_d_garments(settings: Settings = Depends(get_settings)) -> ThreeDAssetListResponse:
+    return ThreeDAssetListResponse(items=list_three_d_assets(settings.three_d_assets_dir))
+
+
+@router.post("/api/3d-assets/conversion-jobs", response_model=ThreeDConversionJob)
+def create_three_d_conversion_job(
+    request: ThreeDConversionJobRequest,
+    settings: Settings = Depends(get_settings),
+) -> ThreeDConversionJob:
+    job_id = create_asset_id("convert3d")
+    asset_id = create_asset_id("garment3d")
+    timestamp = now_utc()
+
+    asset_dir = ensure_directory(settings.three_d_assets_dir / asset_id)
+    source_dir = ensure_directory(asset_dir / "sources")
+    job_dir = ensure_directory(settings.three_d_conversion_jobs_dir / job_id)
+
+    stored_source_files: list[ThreeDSourceFile] = []
+    source_payloads: list[tuple[str, bytes]] = []
+    for source in request.source_files:
+        file_bytes = decode_base64_image(source.file_base64)
+        source_path = source_dir / source.filename
+        source_path.write_bytes(file_bytes)
+        stored_source_files.append(
+            ThreeDSourceFile(
+                filename=source.filename,
+                file_format=source.file_format,
+                file_url=f"{settings.static_data_url_prefix}/3d-assets/{asset_id}/sources/{source.filename}",
+                size_bytes=len(file_bytes),
+            )
+        )
+        source_payloads.append((source.file_format, file_bytes))
+
+    glb_relative_path, warnings = select_glb_artifact(request)
+    asset = ThreeDAsset(
+        id=asset_id,
+        name=request.name or asset_id,
+        category=request.category,
+        status="converted" if glb_relative_path else "staged",
+        source_files=stored_source_files,
+        glb_url=(
+            f"{settings.static_data_url_prefix}/3d-assets/{asset_id}/{glb_relative_path}"
+            if glb_relative_path
+            else None
+        ),
+        preview_image_url=None,
+        rig=build_default_3d_rig(request.category, request.rig_strategy),
+        mesh_stats=build_mesh_stats(source_payloads),
+        conversion_engine="mock-3d-converter",
+        warnings=warnings,
+        created_at=timestamp,
+        updated_at=timestamp,
+    )
+    save_three_d_asset(asset_dir, asset)
+
+    job = ThreeDConversionJob(
+        id=job_id,
+        asset_id=asset_id,
+        name=asset.name,
+        category=request.category,
+        target_format=request.target_format,
+        status="succeeded",
+        source_files=stored_source_files,
+        output_asset=asset,
+        conversion_engine="mock-3d-converter",
+        warnings=warnings,
+        created_at=timestamp,
+        updated_at=timestamp,
+    )
+    save_three_d_conversion_job(job_dir, job)
+    return job
+
+
+@router.get("/api/3d-assets/conversion-jobs/{job_id}", response_model=ThreeDConversionJob)
+def get_three_d_conversion_job(job_id: str, settings: Settings = Depends(get_settings)) -> ThreeDConversionJob:
+    job_dir = settings.three_d_conversion_jobs_dir / job_id
+    if not job_dir.exists():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="3D conversion job not found")
+    return load_three_d_conversion_job(job_dir)
 
 
 @router.post("/api/try-on/jobs", response_model=TryOnJob)
