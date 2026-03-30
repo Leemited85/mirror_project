@@ -11,3 +11,4 @@ apps/frontend/.vite/
 apps/frontend/node_modules/.vite/
 
 apps/backend/data/
+.venv/
