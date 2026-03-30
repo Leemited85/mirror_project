@@ -20,8 +20,10 @@ class CatVtonProvider(VtonProvider):
         landmarks: PoseLandmarks,
         frame_width: int,
         frame_height: int,
+        garment_name: str | None = None,
+        garment_category: str | None = None,
     ) -> tuple[bytes | None, list[str]]:
-        del model_image_bytes, garment_image_bytes, overlay, landmarks, frame_width, frame_height
+        del model_image_bytes, garment_image_bytes, overlay, landmarks, frame_width, frame_height, garment_name, garment_category
 
         if not self._endpoint:
             raise RuntimeError("CATVTON_ENDPOINT is not configured.")

@@ -1,20 +1,42 @@
-import type { AppStatus } from '../types/fitting';
+import type { AppStatus, GarmentAsset, ProviderStatus } from '../types/fitting';
 
 type StatusPanelProps = {
   status: AppStatus;
+  providerStatus: ProviderStatus | null;
+  cameraLabel: string | null;
+  isOrbbecMatched: boolean;
+  selectedGarment: GarmentAsset | null;
 };
 
-export function StatusPanel({ status }: StatusPanelProps) {
+export function StatusPanel({
+  status,
+  providerStatus,
+  cameraLabel,
+  isOrbbecMatched,
+  selectedGarment
+}: StatusPanelProps) {
   return (
     <section className="panel status-panel">
-      <h2>상태</h2>
+      <h2>System Status</h2>
       <dl>
-        <dt>단계</dt>
+        <dt>Phase</dt>
         <dd>{translatePhase(status.phase)}</dd>
-        <dt>메시지</dt>
+        <dt>Message</dt>
         <dd>{status.message}</dd>
-        <dt>시간</dt>
+        <dt>Updated</dt>
         <dd>{status.lastUpdatedAt ? new Date(status.lastUpdatedAt).toLocaleTimeString() : '-'}</dd>
+        <dt>Camera</dt>
+        <dd>{cameraLabel ?? 'No active camera'}</dd>
+        <dt>Orbbec</dt>
+        <dd>{cameraLabel ? (isOrbbecMatched ? 'Matched Orbbec/Astro label' : 'No Orbbec label match') : 'Unknown'}</dd>
+        <dt>Garment</dt>
+        <dd>{selectedGarment ? selectedGarment.name : 'No garment selected'}</dd>
+        <dt>Pose</dt>
+        <dd>{providerStatus ? providerStatus.pose_provider : 'Unknown'}</dd>
+        <dt>VTON</dt>
+        <dd>{providerStatus ? providerStatus.vton_provider : 'Unknown'}</dd>
+        <dt>VTON status</dt>
+        <dd>{buildVtonStatus(providerStatus)}</dd>
       </dl>
     </section>
   );
@@ -22,14 +44,37 @@ export function StatusPanel({ status }: StatusPanelProps) {
 
 function translatePhase(phase: AppStatus['phase']) {
   const labels: Record<AppStatus['phase'], string> = {
-    idle: '대기',
-    'camera-ready': '카메라 준비',
-    processing: '의류 처리 중',
-    fitting: '가상 피팅 중',
-    capturing: '결과 저장 중',
-    ready: '완료',
-    error: '오류'
+    idle: 'Idle',
+    'camera-ready': 'Camera ready',
+    processing: 'Processing garment',
+    fitting: 'Running synthesis',
+    capturing: 'Saving result',
+    ready: 'Ready',
+    error: 'Error'
   };
 
   return labels[phase];
+}
+
+function buildVtonStatus(providerStatus: ProviderStatus | null) {
+  if (!providerStatus) {
+    return 'Unavailable';
+  }
+  if (providerStatus.vton_provider === 'comfyui') {
+    if (providerStatus.comfyui_message) {
+      return providerStatus.comfyui_message;
+    }
+    return providerStatus.comfyui_ready ? 'Ready' : 'Needs setup';
+  }
+
+  if (providerStatus.vton_provider === 'idm-vton') {
+    if (providerStatus.idm_vton_message) {
+      return providerStatus.idm_vton_auth_configured
+        ? `${providerStatus.idm_vton_message} Auth configured.`
+        : providerStatus.idm_vton_message;
+    }
+    return 'IDM-VTON selected. Set IDM_VTON_ENDPOINT_URL or IDM_VTON_BASE_URL.';
+  }
+
+  return `${providerStatus.vton_provider} provider active`;
 }

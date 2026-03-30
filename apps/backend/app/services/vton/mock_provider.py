@@ -18,8 +18,10 @@ class MockVtonProvider(VtonProvider):
         landmarks: PoseLandmarks,
         frame_width: int,
         frame_height: int,
+        garment_name: str | None = None,
+        garment_category: str | None = None,
     ) -> tuple[bytes | None, list[str]]:
-        del landmarks
+        del landmarks, garment_name, garment_category
 
         try:
             from PIL import Image

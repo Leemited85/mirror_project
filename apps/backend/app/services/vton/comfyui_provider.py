@@ -10,6 +10,7 @@ from uuid import uuid4
 
 from app.core.settings import Settings
 from app.models.schemas import OverlayBox, PoseLandmarks
+from app.services.comfyui_diagnostics import is_template_workflow
 from app.services.image_utils import bytes_buffer
 from app.services.vton.base import VtonProvider
 
@@ -35,7 +36,10 @@ class ComfyUiVtonProvider(VtonProvider):
         landmarks: PoseLandmarks,
         frame_width: int,
         frame_height: int,
+        garment_name: str | None = None,
+        garment_category: str | None = None,
     ) -> tuple[bytes | None, list[str]]:
+        del garment_name, garment_category
         self._validate_configuration()
 
         model_upload = self._upload_image(self._normalize_png(model_image_bytes), "model.png")
@@ -64,9 +68,7 @@ class ComfyUiVtonProvider(VtonProvider):
         self.last_job_id = prompt_id
         image_descriptor = self._wait_for_result(prompt_id)
         image_bytes = self._download_result(image_descriptor)
-        warnings = [
-            "ComfyUI workflow completed. Replace the sample workflow placeholders with your actual VTON pipeline nodes."
-        ]
+        warnings = ["ComfyUI workflow completed successfully."]
         return image_bytes, warnings
 
     def _validate_configuration(self) -> None:
@@ -76,6 +78,11 @@ class ComfyUiVtonProvider(VtonProvider):
             raise RuntimeError("COMFYUI_WORKFLOW_PATH is not configured.")
         if not self._workflow_path.exists():
             raise RuntimeError(f"ComfyUI workflow file was not found: {self._workflow_path}")
+        if is_template_workflow(self._workflow_path):
+            raise RuntimeError(
+                "ComfyUI workflow is still using the starter template. "
+                "Replace the placeholder VTON node class and input mappings first."
+            )
 
     def _normalize_png(self, image_bytes: bytes) -> bytes:
         try:

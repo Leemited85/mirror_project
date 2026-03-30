@@ -132,6 +132,20 @@ input {
   font-size: 0.92rem;
 }
 
+.empty-garment-state {
+  display: grid;
+  gap: 0.35rem;
+  padding: 1rem;
+  border: 1px dashed #d8c9bb;
+  border-radius: 16px;
+  color: #6d6158;
+  background: rgba(255, 253, 250, 0.88);
+}
+
+.empty-garment-state p {
+  margin: 0;
+}
+
 .garment-list {
   display: grid;
   gap: 0.8rem;
@@ -168,6 +182,38 @@ input {
   gap: 0.24rem;
 }
 
+.garment-card {
+  display: grid;
+  grid-template-columns: 84px minmax(0, 1fr);
+  gap: 0.85rem;
+  align-items: center;
+}
+
+.garment-card-copy {
+  display: grid;
+  gap: 0.24rem;
+}
+
+.garment-thumbnail-shell {
+  display: grid;
+  place-items: center;
+  width: 84px;
+  height: 104px;
+  border-radius: 14px;
+  background:
+    radial-gradient(circle at top, rgba(255, 255, 255, 0.95), rgba(233, 221, 209, 0.9)),
+    linear-gradient(180deg, #fbf7f3 0%, #efe3d7 100%);
+  border: 1px solid #eadfd1;
+  overflow: hidden;
+}
+
+.garment-thumbnail {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
 .garment-list-title {
   word-break: break-word;
   font-weight: 700;
@@ -201,6 +247,11 @@ input {
   gap: 0.9rem;
 }
 
+.sensor-panel {
+  display: grid;
+  gap: 0.9rem;
+}
+
 .control-panel {
   display: grid;
   gap: 0.75rem;
@@ -225,6 +276,29 @@ input {
   display: flex;
   flex-direction: column;
   gap: 0.22rem;
+}
+
+.camera-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 0.85rem;
+}
+
+.camera-picker {
+  display: grid;
+  gap: 0.35rem;
+  color: #6d6158;
+}
+
+.camera-select {
+  min-width: 240px;
+  border-radius: 12px;
+  border: 1px solid #d8c9bb;
+  padding: 0.65rem 0.8rem;
+  background: #fffdfa;
+  color: #2d231d;
 }
 
 .manual-controls p {
@@ -423,6 +497,64 @@ input {
   color: #685d53;
 }
 
+.camera-summary span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.5rem;
+}
+
+.sensor-meta {
+  display: flex;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+  color: #685d53;
+}
+
+.sensor-copy,
+.sensor-error {
+  margin: 0;
+  color: #6d6158;
+}
+
+.sensor-error {
+  color: #9a4f33;
+}
+
+.sensor-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.8rem;
+}
+
+.sensor-card {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.sensor-card-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.6rem;
+  color: #685d53;
+}
+
+.sensor-stage {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border-radius: 16px;
+  border: 1px solid #eadfd1;
+  background: linear-gradient(180deg, rgba(252, 248, 242, 0.72), rgba(239, 231, 222, 0.92));
+  overflow: hidden;
+}
+
+.sensor-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
 .empty-state {
   display: grid;
   place-items: center;
@@ -519,5 +651,19 @@ input {
 
   .layout {
     grid-template-columns: 1fr;
+  }
+
+  .camera-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .sensor-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .camera-select {
+    min-width: 0;
+    width: 100%;
   }
 }

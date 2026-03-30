@@ -1,4 +1,13 @@
-import type { CaptureResponse, GarmentAsset, ModelAsset, PoseLandmarks, ProviderStatus, TryOnJob } from '../types/fitting';
+import type {
+  CaptureResponse,
+  GarmentAsset,
+  ModelAsset,
+  OpenNICameraPreview,
+  OpenNICameraStatus,
+  PoseLandmarks,
+  ProviderStatus,
+  TryOnJob
+} from '../types/fitting';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
 const API_ORIGIN = new URL(API_BASE_URL).origin;
@@ -98,4 +107,18 @@ export function captureResult(payload: { image_base64: string; file_extension?: 
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
   });
+}
+
+export function getOpenNiCameraStatus() {
+  return apiRequest<OpenNICameraStatus>('/api/camera/openni/status');
+}
+
+export function reconnectOpenNiCamera() {
+  return apiRequest<OpenNICameraStatus>('/api/camera/openni/reconnect', {
+    method: 'POST'
+  });
+}
+
+export function getOpenNiCameraPreview() {
+  return apiRequest<OpenNICameraPreview>('/api/camera/openni/preview');
 }

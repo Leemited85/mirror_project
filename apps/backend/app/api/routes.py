@@ -13,6 +13,8 @@ from app.models.schemas import (
     ModelAnalyzeRequest,
     ModelAsset,
     ModelListResponse,
+    OpenNICameraPreviewResponse,
+    OpenNICameraStatusResponse,
     ProviderStatusResponse,
     ThreeDAsset,
     ThreeDAssetListResponse,
@@ -40,7 +42,10 @@ from app.services.asset_store import (
     save_tryon_job,
 )
 from app.services.capture_service import save_capture
+from app.services.comfyui_diagnostics import inspect_comfyui
+from app.services.camera import get_openni_camera_service
 from app.services.fitting.geometry import compute_overlay_from_landmarks
+from app.services.builtin_garments import sync_builtin_garments
 from app.services.garment_processing import remove_background
 from app.services.garment_rig import build_default_garment_rig
 from app.services.image_utils import decode_base64_image, save_image_bytes
@@ -58,12 +63,58 @@ def health() -> HealthResponse:
 
 @router.get("/api/system/providers", response_model=ProviderStatusResponse)
 def provider_status(settings: Settings = Depends(get_settings)) -> ProviderStatusResponse:
+    idm_api_name = settings.idm_vton_api_name.strip() or "/tryon"
+    normalized_idm_api_name = idm_api_name if idm_api_name.startswith("/") else f"/{idm_api_name}"
+    idm_endpoint_url = settings.idm_vton_endpoint_url or (
+        f"{settings.idm_vton_base_url.rstrip('/')}{normalized_idm_api_name}" if settings.idm_vton_base_url else None
+    )
+    idm_auth_configured = bool(settings.idm_vton_auth_token or settings.idm_vton_api_key)
+    idm_message = None
+    if settings.vton_provider == "idm-vton":
+        if idm_endpoint_url:
+            idm_message = f"External IDM-VTON endpoint configured: {idm_endpoint_url}"
+        else:
+            idm_message = "IDM-VTON selected, but no endpoint is configured."
+
+    diagnostics = (
+        inspect_comfyui(settings)
+        if settings.vton_provider == "comfyui"
+        else {
+            "comfyui_reachable": None,
+            "comfyui_workflow_exists": None,
+            "comfyui_workflow_is_template": None,
+            "comfyui_ready": None,
+            "comfyui_message": None,
+        }
+    )
     return ProviderStatusResponse(
         pose_provider=settings.pose_provider,
         vton_provider=settings.vton_provider,
+        idm_vton_endpoint_url=idm_endpoint_url,
+        idm_vton_auth_configured=idm_auth_configured if settings.vton_provider == "idm-vton" else None,
+        idm_vton_message=idm_message,
         comfyui_base_url=settings.comfyui_base_url,
         comfyui_workflow_path=str(settings.comfyui_workflow_path) if settings.comfyui_workflow_path else None,
+        **diagnostics,
     )
+
+
+@router.get("/api/camera/openni/status", response_model=OpenNICameraStatusResponse)
+def openni_camera_status(settings: Settings = Depends(get_settings)) -> OpenNICameraStatusResponse:
+    camera_service = get_openni_camera_service(settings)
+    return camera_service.get_status()
+
+
+@router.post("/api/camera/openni/reconnect", response_model=OpenNICameraStatusResponse)
+def reconnect_openni_camera(settings: Settings = Depends(get_settings)) -> OpenNICameraStatusResponse:
+    camera_service = get_openni_camera_service(settings)
+    return camera_service.reconnect()
+
+
+@router.get("/api/camera/openni/preview", response_model=OpenNICameraPreviewResponse)
+def openni_camera_preview(settings: Settings = Depends(get_settings)) -> OpenNICameraPreviewResponse:
+    camera_service = get_openni_camera_service(settings)
+    return camera_service.get_preview()
 
 
 @router.post("/api/models/analyze", response_model=ModelAsset)
@@ -134,6 +185,7 @@ def process_garment(
 
 @router.get("/api/garments", response_model=GarmentListResponse)
 def list_garments(settings: Settings = Depends(get_settings)) -> GarmentListResponse:
+    sync_builtin_garments(settings)
     return GarmentListResponse(items=list_garment_assets(settings.garments_dir))
 
 
@@ -267,6 +319,8 @@ def create_try_on_job(
             landmarks=landmarks,
             frame_width=model_asset.frame_width,
             frame_height=model_asset.frame_height,
+            garment_name=garment_asset.name,
+            garment_category=garment_asset.category,
         )
         warnings.extend(provider_warnings)
         if result_bytes:

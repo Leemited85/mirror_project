@@ -13,8 +13,16 @@ class HealthResponse(BaseModel):
 class ProviderStatusResponse(BaseModel):
     pose_provider: str
     vton_provider: str
+    idm_vton_endpoint_url: str | None = None
+    idm_vton_auth_configured: bool | None = None
+    idm_vton_message: str | None = None
     comfyui_base_url: str | None = None
     comfyui_workflow_path: str | None = None
+    comfyui_reachable: bool | None = None
+    comfyui_workflow_exists: bool | None = None
+    comfyui_workflow_is_template: bool | None = None
+    comfyui_ready: bool | None = None
+    comfyui_message: str | None = None
 
 
 class PosePoint(BaseModel):
@@ -232,3 +240,39 @@ class CaptureResponse(BaseModel):
     capture_id: str
     saved_path: str
     created_at: datetime
+
+
+class CameraStreamAvailability(BaseModel):
+    color: bool = False
+    depth: bool = False
+    ir: bool = False
+
+
+class OpenNICameraStatusResponse(BaseModel):
+    provider: str = "openni"
+    package_available: bool = False
+    sdk_loaded: bool = False
+    connected: bool = False
+    dll_directory: str | None = None
+    device_uri: str | None = None
+    vendor: str | None = None
+    name: str | None = None
+    sensors: CameraStreamAvailability = Field(default_factory=CameraStreamAvailability)
+    message: str
+    last_error: str | None = None
+
+
+class OpenNICameraPreviewResponse(BaseModel):
+    provider: str = "openni"
+    connected: bool
+    device_uri: str | None = None
+    color_image_data_url: str | None = None
+    depth_image_data_url: str | None = None
+    ir_image_data_url: str | None = None
+    color_width: int | None = None
+    color_height: int | None = None
+    depth_width: int | None = None
+    depth_height: int | None = None
+    ir_width: int | None = None
+    ir_height: int | None = None
+    captured_at: datetime

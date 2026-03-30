@@ -104,8 +104,16 @@ export type TryOnJob = {
 export type ProviderStatus = {
   pose_provider: string;
   vton_provider: string;
+  idm_vton_endpoint_url: string | null;
+  idm_vton_auth_configured: boolean | null;
+  idm_vton_message: string | null;
   comfyui_base_url: string | null;
   comfyui_workflow_path: string | null;
+  comfyui_reachable: boolean | null;
+  comfyui_workflow_exists: boolean | null;
+  comfyui_workflow_is_template: boolean | null;
+  comfyui_ready: boolean | null;
+  comfyui_message: string | null;
 };
 
 export type AppStatus = {
@@ -118,4 +126,40 @@ export type CaptureResponse = {
   capture_id: string;
   saved_path: string;
   created_at: string;
+};
+
+export type CameraStreamAvailability = {
+  color: boolean;
+  depth: boolean;
+  ir: boolean;
+};
+
+export type OpenNICameraStatus = {
+  provider: 'openni';
+  package_available: boolean;
+  sdk_loaded: boolean;
+  connected: boolean;
+  dll_directory: string | null;
+  device_uri: string | null;
+  vendor: string | null;
+  name: string | null;
+  sensors: CameraStreamAvailability;
+  message: string;
+  last_error: string | null;
+};
+
+export type OpenNICameraPreview = {
+  provider: 'openni';
+  connected: boolean;
+  device_uri: string | null;
+  color_image_data_url: string | null;
+  depth_image_data_url: string | null;
+  ir_image_data_url: string | null;
+  color_width: number | null;
+  color_height: number | null;
+  depth_width: number | null;
+  depth_height: number | null;
+  ir_width: number | null;
+  ir_height: number | null;
+  captured_at: string;
 };

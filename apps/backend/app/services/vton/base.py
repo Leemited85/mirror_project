@@ -15,6 +15,8 @@ class VtonProvider(ABC):
         landmarks: PoseLandmarks,
         frame_width: int,
         frame_height: int,
+        garment_name: str | None = None,
+        garment_category: str | None = None,
     ) -> tuple[bytes | None, list[str]]:
         """Return composed PNG bytes and any warnings."""
 

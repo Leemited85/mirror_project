@@ -1,21 +1,18 @@
-import {
-  forwardRef,
-  useEffect,
-  useImperativeHandle,
-  useRef,
-  useState
-} from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import type { GarmentAsset, OverlayBox, PoseLandmarks, PosePoint } from '../types/fitting';
 import { computeOverlayFromLandmarks, smoothOverlay } from '../utils/fittingGeometry';
 import { drawGarmentRig } from '../utils/garmentRigRenderer';
-import { ThreeDGarmentOverlay } from './ThreeDGarmentOverlay';
 
 type CameraPreviewProps = {
   garment: GarmentAsset | null;
   enableLiveOverlay?: boolean;
-  showThreeDSample?: boolean;
   showTrackingGuide?: boolean;
-  onStatusChange?: (message: string, isConnected: boolean) => void;
+  onStatusChange?: (
+    message: string,
+    isConnected: boolean,
+    deviceLabel?: string | null,
+    isOrbbecMatch?: boolean
+  ) => void;
   onTrackingChange?: (message: string, isTracking: boolean) => void;
 };
 
@@ -58,13 +55,13 @@ type TrackingRect = {
 
 const MEDIAPIPE_POSE_SCRIPT_ID = 'mediapipe-pose-runtime';
 const MEDIAPIPE_POSE_SCRIPT_URL = 'https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js';
-const DEFAULT_MESSAGE = '카메라 연결 상태를 확인하고 있습니다.';
+const DEFAULT_MESSAGE = 'Checking camera availability.';
 const MIN_VISIBILITY = 0.2;
 const LANDMARK_SMOOTHING_ALPHA = 0.2;
 const FALLBACK_LOSS_FRAMES = 24;
 
 export const CameraPreview = forwardRef<CameraPreviewHandle, CameraPreviewProps>(function CameraPreview(
-  { garment, enableLiveOverlay = true, showThreeDSample = true, showTrackingGuide = true, onStatusChange, onTrackingChange },
+  { garment, enableLiveOverlay = true, showTrackingGuide = true, onStatusChange, onTrackingChange },
   ref
 ) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -85,13 +82,16 @@ export const CameraPreview = forwardRef<CameraPreviewHandle, CameraPreviewProps>
   const [trackingReady, setTrackingReady] = useState(false);
   const [isTracking, setIsTracking] = useState(false);
   const [message, setMessage] = useState(DEFAULT_MESSAGE);
-  const [renderLandmarks, setRenderLandmarks] = useState<PoseLandmarks | null>(null);
   const [frameSize, setFrameSize] = useState({ width: 0, height: 0 });
+  const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([]);
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null);
+  const [activeDeviceLabel, setActiveDeviceLabel] = useState<string | null>(null);
+  const [isOrbbecCamera, setIsOrbbecCamera] = useState(false);
 
   useImperativeHandle(
     ref,
     () => ({
-      reconnect: connectCamera,
+      reconnect: () => connectCamera(selectedDeviceId),
       captureSnapshot: () => {
         const video = videoRef.current;
         if (!video || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || video.videoWidth === 0 || video.videoHeight === 0) {
@@ -119,7 +119,7 @@ export const CameraPreview = forwardRef<CameraPreviewHandle, CameraPreviewProps>
         };
       }
     }),
-    []
+    [selectedDeviceId]
   );
 
   useEffect(() => {
@@ -139,14 +139,20 @@ export const CameraPreview = forwardRef<CameraPreviewHandle, CameraPreviewProps>
 
         startTrackingLoop();
       } catch {
-        // Errors are surfaced through status callbacks and panel text.
+        // Errors are surfaced through the status message and callback.
       }
     }
 
+    const handleDeviceChange = () => {
+      void syncDeviceList();
+    };
+
     void setup();
+    navigator.mediaDevices?.addEventListener?.('devicechange', handleDeviceChange);
 
     return () => {
       cancelled = true;
+      navigator.mediaDevices?.removeEventListener?.('devicechange', handleDeviceChange);
       stopTrackingLoop();
       stopCamera();
       poseRef.current = null;
@@ -184,59 +190,89 @@ export const CameraPreview = forwardRef<CameraPreviewHandle, CameraPreviewProps>
     };
   }, [garment?.processed_image_url]);
 
-  async function connectCamera() {
+  async function connectCamera(preferredDeviceId?: string | null) {
     setIsLoading(true);
     setMessage(DEFAULT_MESSAGE);
 
     if (!navigator.mediaDevices?.getUserMedia) {
-      const nextMessage = '이 브라우저는 카메라 접근을 지원하지 않습니다.';
+      const nextMessage = 'This browser does not support camera access.';
       setIsConnected(false);
       setIsLoading(false);
       setMessage(nextMessage);
-      emitCameraStatus(nextMessage, false);
+      emitCameraStatus(nextMessage, false, null, false);
       throw new Error(nextMessage);
     }
 
     try {
       stopCamera();
+      const cameras = await getCameraDevices();
+      setAvailableCameras(cameras);
+
+      const targetCamera = pickCamera(cameras, preferredDeviceId);
+      if (!targetCamera) {
+        throw new DOMException('No video input devices found.', 'NotFoundError');
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'user' },
+        video: { deviceId: { exact: targetCamera.deviceId } },
         audio: false
       });
 
       streamRef.current = stream;
+      const trackLabel = stream.getVideoTracks()[0]?.label || targetCamera.label || 'Unknown camera';
+      const matchedOrbbec = isOrbbecLabel(trackLabel);
+      setSelectedDeviceId(targetCamera.deviceId);
+      setActiveDeviceLabel(trackLabel);
+      setIsOrbbecCamera(matchedOrbbec);
+
       const video = videoRef.current;
       if (video) {
         video.srcObject = stream;
         await video.play().catch(() => undefined);
       }
 
-      const nextMessage = '카메라가 연결되었습니다.';
+      const nextMessage = matchedOrbbec
+        ? `Connected to camera: ${trackLabel} (Orbbec match detected).`
+        : `Connected to camera: ${trackLabel}`;
       setIsConnected(true);
       setIsLoading(false);
       setMessage(nextMessage);
-      emitCameraStatus(nextMessage, true);
+      emitCameraStatus(nextMessage, true, trackLabel, matchedOrbbec);
+      await syncDeviceList(targetCamera.deviceId);
     } catch (caught) {
       const nextMessage = buildCameraErrorMessage(caught);
       setIsConnected(false);
       setIsLoading(false);
       setMessage(nextMessage);
-      emitCameraStatus(nextMessage, false);
+      emitCameraStatus(nextMessage, false, null, false);
       throw caught;
+    }
+  }
+
+  async function syncDeviceList(preferredDeviceId?: string | null) {
+    if (!navigator.mediaDevices?.enumerateDevices) {
+      return;
+    }
+
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const cameras = devices.filter((device) => device.kind === 'videoinput');
+    setAvailableCameras(cameras);
+    if (preferredDeviceId && cameras.some((device) => device.deviceId === preferredDeviceId)) {
+      setSelectedDeviceId(preferredDeviceId);
     }
   }
 
   async function ensurePoseLoaded() {
     if (poseRef.current) {
       setTrackingReady(true);
-      emitTrackingStatus('MediaPipe Pose가 준비되었습니다. 신체 입력을 기다리고 있습니다.', false);
+      emitTrackingStatus('MediaPipe Pose is ready. Waiting for a body in frame.', false);
       return;
     }
 
-    await loadScript(MEDIAPIPE_POSE_SCRIPT_ID, MEDIAPIPE_POSE_SCRIPT_URL, 'MediaPipe Pose 스크립트를 불러오지 못했습니다.');
+    await loadScript(MEDIAPIPE_POSE_SCRIPT_ID, MEDIAPIPE_POSE_SCRIPT_URL, 'Failed to load MediaPipe Pose runtime.');
 
     if (!window.Pose) {
-      const nextMessage = 'MediaPipe Pose 전역 객체를 찾지 못했습니다.';
+      const nextMessage = 'MediaPipe Pose global was not found.';
       emitTrackingStatus(nextMessage, false);
       throw new Error(nextMessage);
     }
@@ -257,7 +293,7 @@ export const CameraPreview = forwardRef<CameraPreviewHandle, CameraPreviewProps>
 
     poseRef.current = pose;
     setTrackingReady(true);
-    emitTrackingStatus('MediaPipe Pose가 준비되었습니다. 신체 입력을 기다리고 있습니다.', false);
+    emitTrackingStatus('MediaPipe Pose is ready. Waiting for a body in frame.', false);
   }
 
   function startTrackingLoop() {
@@ -337,17 +373,15 @@ export const CameraPreview = forwardRef<CameraPreviewHandle, CameraPreviewProps>
       missedFramesRef.current += 1;
       if (missedFramesRef.current > FALLBACK_LOSS_FRAMES) {
         currentLandmarksRef.current = null;
-        setRenderLandmarks(null);
       }
-      emitTrackingStatus('신체를 다시 찾는 중입니다. 카메라 중앙으로 들어와 주세요.', false);
+      emitTrackingStatus('Searching for a stable body pose. Move toward the center of frame.', false);
       return;
     }
 
     missedFramesRef.current = 0;
     const nextLandmarks = smoothLandmarks(currentLandmarksRef.current, mapped, LANDMARK_SMOOTHING_ALPHA);
     currentLandmarksRef.current = nextLandmarks;
-    setRenderLandmarks(nextLandmarks);
-    emitTrackingStatus('MediaPipe Pose로 신체를 추적 중입니다.', true);
+    emitTrackingStatus('Tracking body pose with MediaPipe Pose.', true);
   }
 
   function drawOverlayForLandmarks(
@@ -357,7 +391,7 @@ export const CameraPreview = forwardRef<CameraPreviewHandle, CameraPreviewProps>
     isFallback: boolean,
     frameHeight: number
   ) {
-    if (enableLiveOverlay && garment && garmentImageRef.current && !isFallback && !showThreeDSample) {
+    if (enableLiveOverlay && garment && garmentImageRef.current && !isFallback) {
       const nextOverlay = computeOverlayFromLandmarks(landmarks, frameHeight, garment.width, garment.height);
       const smoothed = smoothOverlay(smoothedOverlayRef.current, nextOverlay);
       smoothedOverlayRef.current = smoothed;
@@ -382,15 +416,21 @@ export const CameraPreview = forwardRef<CameraPreviewHandle, CameraPreviewProps>
       track.stop();
     }
     streamRef.current = null;
+
+    const video = videoRef.current;
+    if (video) {
+      video.srcObject = null;
+    }
   }
 
-  function emitCameraStatus(nextMessage: string, isNextConnected: boolean) {
-    if (lastCameraStatusRef.current === nextMessage) {
+  function emitCameraStatus(nextMessage: string, isNextConnected: boolean, deviceLabel: string | null, matchedOrbbec: boolean) {
+    const statusKey = `${nextMessage}|${deviceLabel ?? ''}|${matchedOrbbec ? '1' : '0'}`;
+    if (lastCameraStatusRef.current === statusKey) {
       return;
     }
 
-    lastCameraStatusRef.current = nextMessage;
-    onStatusChange?.(nextMessage, isNextConnected);
+    lastCameraStatusRef.current = statusKey;
+    onStatusChange?.(nextMessage, isNextConnected, deviceLabel, matchedOrbbec);
   }
 
   function emitTrackingStatus(nextMessage: string, isNextTracking: boolean) {
@@ -403,43 +443,63 @@ export const CameraPreview = forwardRef<CameraPreviewHandle, CameraPreviewProps>
     onTrackingChange?.(nextMessage, isNextTracking);
   }
 
+  function handleCameraSelection(deviceId: string) {
+    setSelectedDeviceId(deviceId);
+    void connectCamera(deviceId);
+  }
+
   return (
     <section className="panel">
       <div className="photo-meta">
-        <span className="photo-label">실시간 카메라</span>
-        <strong>{isConnected ? '카메라 미리보기가 연결됨' : '카메라 연결 필요'}</strong>
+        <span className="photo-label">Live camera</span>
+        <strong>{isConnected ? 'Camera preview connected' : 'Camera connection required'}</strong>
         <p>{message}</p>
+      </div>
+
+      <div className="camera-toolbar">
+        <label className="camera-picker">
+          <span>Video input</span>
+          <select
+            className="camera-select"
+            value={selectedDeviceId ?? ''}
+            onChange={(event) => handleCameraSelection(event.target.value)}
+            disabled={availableCameras.length === 0 || isLoading}
+          >
+            {availableCameras.length === 0 ? <option value="">No camera detected</option> : null}
+            {availableCameras.map((device, index) => (
+              <option key={device.deviceId} value={device.deviceId}>
+                {device.label || `Camera ${index + 1}`}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
 
       <div className="camera-stage">
         {isConnected ? (
           <>
             <video ref={videoRef} className="camera-video" autoPlay playsInline muted />
-            <ThreeDGarmentOverlay
-              objUrl="/models/polotshirt.obj"
-              frameWidth={frameSize.width}
-              frameHeight={frameSize.height}
-              landmarks={renderLandmarks}
-              fitScale={0.72}
-              visible={enableLiveOverlay && showThreeDSample && trackingReady && renderLandmarks !== null}
-            />
             <canvas ref={overlayCanvasRef} className="tracking-overlay" />
           </>
         ) : (
           <div className="empty-state">
             <div>
-              <strong>{isLoading ? '카메라 연결 중입니다.' : '카메라 화면을 표시할 수 없습니다.'}</strong>
-              <p>브라우저 권한과 장치 연결 상태를 확인한 뒤 다시 시도해 주세요.</p>
+              <strong>{isLoading ? 'Connecting camera.' : 'No camera preview is available.'}</strong>
+              <p>Check browser permissions, USB connection, and whether another app is already using the camera.</p>
             </div>
           </div>
         )}
       </div>
 
       <div className="camera-summary">
-        <span>카메라: {isConnected ? '연결됨' : isLoading ? '확인 중' : '연결 실패'}</span>
-        <span>추적: {trackingReady ? (isTracking ? '신체 추적 중' : '포즈 엔진 준비됨') : '준비 중'}</span>
-        <button type="button" className="secondary-action-button" onClick={() => void connectCamera()}>
-          카메라 다시 연결
+        <span>Camera: {isConnected ? activeDeviceLabel ?? 'Connected' : isLoading ? 'Checking' : 'Disconnected'}</span>
+        <span>Orbbec: {isOrbbecCamera ? 'Label matched' : 'No label match'}</span>
+        <span>Tracking: {trackingReady ? (isTracking ? 'Active' : 'Ready') : 'Loading'}</span>
+        <span>
+          Frame: {frameSize.width > 0 && frameSize.height > 0 ? `${frameSize.width} x ${frameSize.height}` : 'Unknown'}
+        </span>
+        <button type="button" className="secondary-action-button" onClick={() => void connectCamera(selectedDeviceId)}>
+          Reconnect camera
         </button>
       </div>
     </section>
@@ -482,7 +542,7 @@ function drawTrackedBody(
 
   context.strokeRect(rect.x, rect.y, rect.width, rect.height);
   context.fillStyle = 'rgba(34, 29, 24, 0.82)';
-  context.fillRect(rect.x, Math.max(0, rect.y - 24), 200, 20);
+  context.fillRect(rect.x, Math.max(0, rect.y - 24), 228, 20);
   context.fillStyle = '#ffffff';
   context.fillText(isFallback ? 'tracking: fallback guide' : 'tracking: mediapipe pose', rect.x + 8, Math.max(14, rect.y - 10));
 
@@ -517,10 +577,26 @@ function buildPointsFromLandmarks(landmarks: PoseLandmarks): Record<TrackingPoin
     neck: { key: 'neck', x: landmarks.neck.x, y: landmarks.neck.y },
     left_shoulder: { key: 'left_shoulder', x: landmarks.left_shoulder.x, y: landmarks.left_shoulder.y },
     right_shoulder: { key: 'right_shoulder', x: landmarks.right_shoulder.x, y: landmarks.right_shoulder.y },
-    left_elbow: { key: 'left_elbow', x: landmarks.left_elbow?.x ?? landmarks.left_shoulder.x, y: landmarks.left_elbow?.y ?? landmarks.left_shoulder.y },
-    right_elbow: { key: 'right_elbow', x: landmarks.right_elbow?.x ?? landmarks.right_shoulder.x, y: landmarks.right_elbow?.y ?? landmarks.right_shoulder.y },
-    left_wrist: { key: 'left_wrist', x: landmarks.left_wrist?.x ?? landmarks.left_hip.x, y: landmarks.left_wrist?.y ?? landmarks.left_hip.y },
-    right_wrist: { key: 'right_wrist', x: landmarks.right_wrist?.x ?? landmarks.right_hip.x, y: landmarks.right_wrist?.y ?? landmarks.right_hip.y },
+    left_elbow: {
+      key: 'left_elbow',
+      x: landmarks.left_elbow?.x ?? landmarks.left_shoulder.x,
+      y: landmarks.left_elbow?.y ?? landmarks.left_shoulder.y
+    },
+    right_elbow: {
+      key: 'right_elbow',
+      x: landmarks.right_elbow?.x ?? landmarks.right_shoulder.x,
+      y: landmarks.right_elbow?.y ?? landmarks.right_shoulder.y
+    },
+    left_wrist: {
+      key: 'left_wrist',
+      x: landmarks.left_wrist?.x ?? landmarks.left_hip.x,
+      y: landmarks.left_wrist?.y ?? landmarks.left_hip.y
+    },
+    right_wrist: {
+      key: 'right_wrist',
+      x: landmarks.right_wrist?.x ?? landmarks.right_hip.x,
+      y: landmarks.right_wrist?.y ?? landmarks.right_hip.y
+    },
     left_hip: { key: 'left_hip', x: landmarks.left_hip.x, y: landmarks.left_hip.y },
     right_hip: { key: 'right_hip', x: landmarks.right_hip.x, y: landmarks.right_hip.y }
   };
@@ -674,19 +750,56 @@ async function loadScript(id: string, src: string, errorMessage: string) {
   });
 }
 
+async function getCameraDevices() {
+  let devices = await navigator.mediaDevices.enumerateDevices();
+  let cameras = devices.filter((device) => device.kind === 'videoinput');
+
+  if (cameras.length > 0 && cameras.some((device) => !device.label)) {
+    const tempStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+    tempStream.getTracks().forEach((track) => track.stop());
+    devices = await navigator.mediaDevices.enumerateDevices();
+    cameras = devices.filter((device) => device.kind === 'videoinput');
+  }
+
+  return cameras;
+}
+
+function pickCamera(cameras: MediaDeviceInfo[], preferredDeviceId?: string | null) {
+  if (preferredDeviceId) {
+    const preferred = cameras.find((device) => device.deviceId === preferredDeviceId);
+    if (preferred) {
+      return preferred;
+    }
+  }
+
+  const orbbecCamera = cameras.find((device) => isOrbbecLabel(device.label));
+  return orbbecCamera ?? cameras[0] ?? null;
+}
+
+function isOrbbecLabel(label: string | undefined | null) {
+  if (!label) {
+    return false;
+  }
+  return /(orbbec|astro)/i.test(label);
+}
+
 function buildCameraErrorMessage(error: unknown) {
   if (error instanceof DOMException) {
     if (error.name === 'NotAllowedError') {
-      return '카메라 권한이 거부되었습니다. 브라우저 권한을 허용해 주세요.';
+      return 'Camera permission was denied. Allow the browser to access the camera.';
     }
     if (error.name === 'NotFoundError') {
-      return '사용 가능한 카메라 장치를 찾지 못했습니다.';
+      return 'No camera device was found. Check whether the camera is connected and recognized by the OS.';
     }
     if (error.name === 'NotReadableError') {
-      return '카메라가 다른 프로그램에서 사용 중입니다.';
+      return 'The camera is busy in another application.';
     }
-    return `카메라 연결 중 오류가 발생했습니다: ${error.message}`;
+    return `Camera connection failed: ${error.message}`;
   }
 
-  return '카메라 연결 중 알 수 없는 오류가 발생했습니다.';
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return 'An unknown camera error occurred.';
 }

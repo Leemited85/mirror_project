@@ -4,7 +4,11 @@ type CaptureButtonProps = {
   label?: string;
 };
 
-export function CaptureButton({ onCapture, disabled, label = '결과 이미지 저장' }: CaptureButtonProps) {
+export function CaptureButton({
+  onCapture,
+  disabled = false,
+  label = 'Capture current frame and synthesize'
+}: CaptureButtonProps) {
   return (
     <button type="button" className="capture-button" onClick={onCapture} disabled={disabled}>
       {label}
